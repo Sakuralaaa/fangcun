@@ -1,0 +1,14 @@
+{
+  "name": "@fangcun/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "fangcun": "dist/fangcun.js" },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/fangcun.js --banner:js=\"#!/usr/bin/env node\"",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fangcun/core": "*"
+  }
+}
