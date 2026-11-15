@@ -2,7 +2,6 @@ name: 发布镜像
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -27,10 +26,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/fangcun
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
           labels: |
             org.opencontainers.image.title=方寸 Fangcun
             org.opencontainers.image.description=自托管资产台账：服务器、域名、证书、订阅、支付卡、号码

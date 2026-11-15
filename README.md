@@ -31,7 +31,7 @@
 
 ### Docker（推荐）
 
-镜像：`ghcr.io/sakuralaaa/fangcun:latest`（amd64 / arm64，main 每次更新自动构建；打 `v*` 标签另有版本号标签）。
+镜像：`ghcr.io/sakuralaaa/fangcun:latest`（amd64 / arm64，每次发版打 `v*` 标签时自动构建，同时有 `latest` 和版本号标签，如 `0.1.0`）。
 
 在任意 Docker 面板里直接拉这个镜像即可，要点：
 
