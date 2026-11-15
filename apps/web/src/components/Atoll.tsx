@@ -1,5 +1,7 @@
 import { atollImpact, type AtollMatch, type AtollServer } from "@fangcun/core";
 import clsx from "clsx";
+import { ChevronRight } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import type { Asset } from "../data/types";
 import { useData } from "../lib/store";
 import { CfBadge, CfHostLine, useAtollCfCheck, useCfOn } from "./Cloudflare";
@@ -13,6 +15,7 @@ const STATUS: Record<string, { label: string; dot: string }> = {
   running: { label: "运行中", dot: "bg-ok" },
   deploying: { label: "部署中", dot: "bg-accent animate-pulse" },
   stopped: { label: "已停止", dot: "bg-subtle" },
+  partial: { label: "部分未运行", dot: "bg-warn" },
   failed: { label: "失败", dot: "border-[1.5px] border-ink bg-transparent" },
   unknown: { label: "未知", dot: "bg-line" },
 };
@@ -59,7 +62,9 @@ export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect:
   const on = useAtollOn();
   const cfOn = useCfOn();
   const cfCheck = useAtollCfCheck();
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
   if (!on) return null;
+  const toggle = (id: string) => setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const servers = atollView.servers;
   const m = atollView.match.get(asset.id);
   const projects = atollView.projectsByAsset.get(asset.id) ?? [];
@@ -88,12 +93,7 @@ export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect:
           : "还没有 Atoll 数据。到「设置 → Atoll 面板」立即同步一次。"
         }</Empty>
       ) : !projects.length ? <Empty>这台机器上还没有 Atoll 项目。</Empty> : projects.map((p) => (
-        <div key={p.id} className="border-b border-line last:border-0">
-          <div className="flex h-10 items-center gap-2 px-4 text-[13px]">
-            <span className="truncate font-semibold">{p.name}</span>
-            {p.handle !== p.name && <span className="truncate font-mono text-[11.5px] text-subtle">{p.handle}</span>}
-            <span className="ml-auto shrink-0 text-xs whitespace-nowrap text-subtle">{p.services.length} 个服务</span>
-          </div>
+        <ProjectRow key={p.id} name={p.name} handle={p.handle} services={p.services} open={open.has(p.id)} onToggle={() => toggle(p.id)}>
           {p.services.map((s) => (<div key={s.id}>
             <div className="grid min-h-9 grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.4fr)] items-center gap-3 py-1.5 pr-4 pl-7 text-[13px]">
               <span className="flex min-w-0 items-center gap-2">
@@ -122,10 +122,32 @@ export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect:
               </div>
             ))}
           </div>))}
-          <div className="h-1.5" />
-        </div>
+        </ProjectRow>
       ))}
     </Card>
+  );
+}
+
+/** One Atoll project as a collapsible row: the header sums up its services; services and hostnames show only when expanded. */
+function ProjectRow({ name, handle, services, open, onToggle, children }: {
+  name: string; handle: string; services: { status: string; domains: unknown[] }[]; open: boolean; onToggle: () => void; children: ReactNode;
+}) {
+  const down = services.filter((s) => s.status !== "running").length;
+  const domains = services.reduce((n, s) => n + s.domains.length, 0);
+  return (
+    <div className="border-b border-line last:border-0">
+      <button type="button" onClick={onToggle} aria-expanded={open}
+        className="flex h-10 w-full items-center gap-2 px-4 text-left text-[13px] hover:bg-field focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ink/30">
+        <ChevronRight size={14} strokeWidth={2} className={clsx("shrink-0 text-muted transition-transform", open && "rotate-90")} />
+        <StatusDot status={down ? (down === services.length ? "stopped" : "partial") : "running"} />
+        <span className="truncate font-semibold">{name}</span>
+        {handle !== name && <span className="truncate font-mono text-[11.5px] text-subtle">{handle}</span>}
+        <span className="ml-auto shrink-0 text-xs whitespace-nowrap text-muted">
+          {services.length} 个服务{down ? ` · ${down} 个未运行` : ""}{domains ? ` · ${domains} 个域名` : ""}
+        </span>
+      </button>
+      {open && <div className="pb-1.5">{children}</div>}
+    </div>
   );
 }
 
