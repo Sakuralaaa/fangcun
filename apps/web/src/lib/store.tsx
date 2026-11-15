@@ -1,4 +1,4 @@
-import { buildAtollView, DEFAULT_SETTINGS, normalizeAsset, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type Settings } from "@fangcun/core";
+import { buildAtollView, DEFAULT_SETTINGS, normalizeAsset, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type PingState, type Settings } from "@fangcun/core";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { demoAssets, demoAtollInfo, demoAtollSnapshot, demoKomariInfo, demoSettings, demoStatus, DEMO_TODAY } from "../data/mock";
 import type { Asset, StatusMap } from "../data/types";
@@ -24,6 +24,8 @@ interface Ctx {
   settings: Settings;
   status: StatusMap;
   statusAt: string | null;
+  /** Whether Komari gave latency data; null until the first status answer. */
+  pingState: PingState | null;
   komari: KomariInfo | null;
   atoll: AtollInfo | null;
   atollSnap: AtollSnapshot | null;
@@ -59,6 +61,7 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   const [settings, setSettings] = useState<Settings>(demo ? demoSettings : DEFAULT_SETTINGS);
   const [status, setStatus] = useState<StatusMap>(demo ? demoStatus : {});
   const [statusAt, setStatusAt] = useState<string | null>(demo ? demoKomariInfo.lastSync : null);
+  const [pingState, setPingState] = useState<PingState | null>(demo ? "ok" : null);
   const [komari, setKomari] = useState<KomariInfo | null>(demo ? demoKomariInfo : null);
   const [atoll, setAtoll] = useState<AtollInfo | null>(demo ? demoAtollInfo : null);
   const [atollSnap, setAtollSnap] = useState<AtollSnapshot | null>(demo ? demoAtollSnapshot : null);
@@ -103,9 +106,10 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
     if (demo) return;
     if (!assets.some((a) => a.komari)) return;
     try {
-      const r = await get<{ at: string; nodes: StatusMap }>("/api/komari/status");
+      const r = await get<{ at: string; nodes: StatusMap; ping?: PingState | null }>("/api/komari/status");
       setStatus(r.nodes);
       setStatusAt(r.at);
+      setPingState(r.ping ?? null);
     } catch { /* probe unreachable: keep last values */ }
   }, [demo, assets]);
 
@@ -174,9 +178,9 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   const atollView = useMemo(() => buildAtollView(assets, settings.atoll.enabled ? atollSnap : null), [assets, atollSnap, settings.atoll.enabled]);
 
   const value = useMemo<Ctx>(() => ({
-    demo, me, assets, settings, status, statusAt, komari, atoll, atollSnap, atollView, reloadAtoll, loading, backupError, reload, refreshStatus,
+    demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, loading, backupError, reload, refreshStatus,
     create, update, renew, remove, restoreField, saveSettings, toast, setMe,
-  }), [demo, me, assets, settings, status, statusAt, komari, atoll, atollSnap, atollView, reloadAtoll, loading, backupError, reload, refreshStatus, create, update, renew, remove, restoreField, saveSettings, toast]);
+  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, loading, backupError, reload, refreshStatus, create, update, renew, remove, restoreField, saveSettings, toast]);
 
   return (
     <C.Provider value={value}>

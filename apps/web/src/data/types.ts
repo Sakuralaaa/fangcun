@@ -1,6 +1,6 @@
 import type { Asset as CoreAsset, NodeStatus } from "@fangcun/core";
 
-export type { AssetType, Cycle, Detail, KomariLink, NodeStatus, Renewal, Settings, Team, TeamMember, Workspace } from "@fangcun/core";
+export type { AssetType, Cycle, Detail, KomariLink, NodePing, NodeStatus, PingState, Renewal, Settings, Team, TeamMember, Workspace } from "@fangcun/core";
 
 export interface QuotaWindow { label: string; usedPct: number; resetAt: string }
 export interface QuotaAccount { authIndex: string; provider: "codex" | "claude" | "gemini"; email: string; plan: string; status: "ready" | "cooling" | "error"; windows: QuotaWindow[] }

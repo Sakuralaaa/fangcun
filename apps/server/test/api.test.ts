@@ -30,6 +30,16 @@ const fakeFetch = (async (url: string, init: RequestInit) => {
   if (u.pathname === "/api/rpc2" && body.method === "common:getNodesLatestStatus") {
     return Response.json({ jsonrpc: "2.0", id: 1, result: { "node-1": { client: "node-1", cpu: 12.5, ram: 1e9, ram_total: 8e9, disk: 1e10, disk_total: 8e10, net_in: 1000, net_out: 500, net_total_up: 10, net_total_down: 20, connections: 5, connections_udp: 1, online: true, uptime: 3600 } } });
   }
+  if (u.pathname === "/api/rpc2" && body.method === "common:getRecords") {
+    expect(body.params).toMatchObject({ type: "ping", hours: 1 });
+    const now = Date.now();
+    const at = (minAgo: number) => new Date(now - minAgo * 60_000).toISOString();
+    return Response.json({ jsonrpc: "2.0", id: 1, result: { count: 5, tasks: [{ id: 3, name: "CN 联通" }, { id: 4, name: "其他" }], records: [
+      { task_id: 3, client: "node-1", time: at(50), value: 40 }, { task_id: 3, client: "node-1", time: at(30), value: -1 },
+      { task_id: 3, client: "node-1", time: at(10), value: 60 }, { task_id: 3, client: "node-1", time: at(1), value: 50 },
+      { task_id: 4, client: "node-1", time: at(5), value: 900 },
+    ] } });
+  }
   if (u.pathname === "/api/rpc2" && body.method === "common:getVersion") return Response.json({ jsonrpc: "2.0", id: 1, result: { version: "1.2.5", hash: "e446bee" } });
   return new Response("nope", { status: 404 });
 }) as unknown as typeof fetch;
@@ -136,6 +146,17 @@ describe("Komari（只读）", () => {
     expect(() => assertAllowed({ method: "GET", path: "/api/admin/client/x/token" as never })).toThrow(/blocked/);
   });
 
+  it("ping records: only common:getRecords with type ping and read-only params", () => {
+    expect(() => assertAllowed({ method: "POST", path: "/api/rpc2", rpc: "common:getRecords", params: { type: "ping", hours: 1, maxCount: 20000 } })).not.toThrow();
+    expect(() => assertAllowed({ method: "POST", path: "/api/rpc2", rpc: "common:getRecords", params: { type: "load", hours: 1 } })).toThrow(/blocked/);
+    expect(() => assertAllowed({ method: "POST", path: "/api/rpc2", rpc: "common:getRecords", params: { type: "ping", hours: 9999 } })).toThrow(/blocked/);
+    expect(() => assertAllowed({ method: "POST", path: "/api/rpc2", rpc: "common:getRecords", params: { type: "ping", sql: "x" } })).toThrow(/blocked/);
+    expect(() => assertAllowed({ method: "POST", path: "/api/rpc2", rpc: "common:getRecords" })).toThrow(/blocked/);
+    // the parameterless read methods stay parameterless
+    expect(() => assertAllowed({ method: "POST", path: "/api/rpc2", rpc: "common:getNodesLatestStatus", params: { uuid: "x" } })).toThrow(/blocked/);
+    expect(() => assertAllowed({ method: "POST", path: "/api/rpc2", rpc: "admin:getRecords", params: { type: "ping" } })).toThrow(/blocked/);
+  });
+
   it("bind, sync, override, restore, status", async () => {
     await call("PUT", "/api/settings", { body: { komari: { url: "https://probe.example", intervalMin: 30 } } });
     const nodes = await json(call("GET", "/api/komari/nodes"));
@@ -156,8 +177,12 @@ describe("Komari（只读）", () => {
     expect(store.get(id)!.price).toBe(22);
 
     const st = await json(call("GET", "/api/komari/status"));
-    expect(st.data.nodes["node-1"]).toMatchObject({ online: true, cpu: 12.5, trafficType: "sum", trafficLimit: 1024 ** 4 });
-    expect(calls.every((c) => c === "GET /api/admin/client/list" || c === "POST /api/rpc2 common:getNodesLatestStatus" || c === "POST /api/rpc2 common:getVersion")).toBe(true);
+    expect(st.data.nodes["node-1"]).toMatchObject({ online: true, cpu: 12.5, trafficType: "sum", trafficLimit: 1024 ** 4, cores: 4, os: "Ubuntu 24.04", region: "香港" });
+    expect(st.data.ping).toBe("ok");
+    // the task with most samples wins; one of its four samples was lost
+    expect(st.data.nodes["node-1"].ping).toMatchObject({ task: "CN 联通", latest: 50, avg: 50, loss: 25 });
+    expect(st.data.nodes["node-1"].ping.buckets).toHaveLength(24);
+    expect(calls.every((c) => ["GET /api/admin/client/list", "POST /api/rpc2 common:getNodesLatestStatus", "POST /api/rpc2 common:getVersion", "POST /api/rpc2 common:getRecords"].includes(c))).toBe(true);
   });
 });
 

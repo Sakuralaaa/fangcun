@@ -50,6 +50,22 @@ export const demoAssets: Asset[] = [
     price: 36, currency: "USD", cycle: "year", expiresAt: "2027-03-14", autoRenew: false, purchasedAt: "2026-03-14", tags: ["个人"],
     details: [{ label: "IPv4", value: "203.0.113.42", mono: true }, { label: "地区", value: "洛杉矶" }, { label: "CPU", value: "1 核" }, { label: "内存", value: "1 GB" }, { label: "硬盘", value: "20 GB" }, { label: "系统", value: "Alpine 3.20" }],
     komari: kom("9b2e-lalab"), atoll: { serverId: "srv_lalab" } }),
+  mk({ id: "tyo-edge", type: "server", name: "tyo-edge", subtitle: "东京 · 博客与静态站", provider: "樱花云",
+    price: 299, currency: "CNY", cycle: "year", expiresAt: "2027-08-09", autoRenew: true, purchasedAt: "2025-08-09", tags: ["个人", "CN2 GIA"],
+    details: [{ label: "IPv4", value: "203.0.113.61", mono: true }, { label: "地区", value: "东京" }, { label: "CPU", value: "2 核" }, { label: "内存", value: "2 GB" }, { label: "硬盘", value: "40 GB" }, { label: "系统", value: "Debian 12" }],
+    note: "不限流量套餐。", komari: kom("51aa-tyo") }),
+  mk({ id: "fra-backup", type: "server", name: "fra-backup", subtitle: "法兰克福 · 异地备份", provider: "莱茵主机",
+    price: 4.5, currency: "EUR", cycle: "month", expiresAt: "2026-11-19", autoRenew: false, purchasedAt: "2025-02-19", tags: ["备份"],
+    details: [{ label: "IPv4", value: "198.51.100.88", mono: true }, { label: "地区", value: "法兰克福" }, { label: "CPU", value: "1 核" }, { label: "内存", value: "2 GB" }, { label: "硬盘", value: "500 GB HDD" }, { label: "系统", value: "Ubuntu 22.04" }],
+    note: "备份盘快满了，续费前决定要不要换大盘。", komari: kom("e7f0-fra", {}, 19) }),
+  mk({ id: "sjc-build", type: "server", name: "sjc-build", subtitle: "圣何塞 · 构建机", provider: "西岸云",
+    price: 60, currency: "USD", cycle: "year", expiresAt: "2027-02-01", autoRenew: true, purchasedAt: "2026-02-01", tags: ["CI", "星桥商城"],
+    details: [{ label: "IPv4", value: "192.0.2.150", mono: true }, { label: "地区", value: "圣何塞" }, { label: "CPU", value: "4 核" }, { label: "内存", value: "8 GB" }, { label: "硬盘", value: "100 GB" }, { label: "系统", value: "Rocky Linux 9" }],
+    komari: kom("3c3c-sjc", {}, 1) }),
+  mk({ id: "lon-relay", type: "server", name: "lon-relay", subtitle: "伦敦 · 中转", provider: "雾都主机",
+    price: 3, currency: "GBP", cycle: "month", expiresAt: "2026-12-28", autoRenew: true, purchasedAt: "2026-06-28", tags: ["中转"],
+    details: [{ label: "IPv4", value: "203.0.113.200", mono: true }, { label: "地区", value: "伦敦" }, { label: "CPU", value: "1 核" }, { label: "内存", value: "512 MB" }, { label: "硬盘", value: "10 GB" }, { label: "系统", value: "Alpine 3.20" }],
+    komari: kom("8d8d-lon") }),
   mk({ id: "api-cert", type: "cert", name: "api.starbridge.example", subtitle: "TLS 证书 · Let's Encrypt", provider: "Let's Encrypt",
     price: 0, cycle: "quarter", expiresAt: "2026-11-19", purchasedAt: "2026-08-21",
     tags: ["星桥商城"], related: ["hk-api-02", "starbridge"], note: "自动续期脚本 10 月迁机后没恢复，要手动续。",
@@ -121,15 +137,44 @@ const st = (s: Partial<NodeStatus> & Pick<NodeStatus, "uuid">): NodeStatus => ({
   trafficLimit: 0, trafficType: "max", uptimeSec: 0, tcp: 0, udp: 0, process: 0, netHistory: [], ...s,
 });
 const D = 86_400;
+const G = 1024 ** 3;
+const T1 = 1024 ** 4;
+/** Deterministic hour of ping slots: base ms plus a wobble; `lost` slots carry loss, `gaps` have no sample. */
+function ping(task: string, base: number, wobble: number, lost: Record<number, number> = {}, gaps: number[] = []): NonNullable<NodeStatus["ping"]> {
+  const buckets = Array.from({ length: 24 }, (_, i) => {
+    if (gaps.includes(i)) return { ms: null, loss: null };
+    const l = lost[i] ?? 0;
+    return { ms: l >= 100 ? null : Math.round(base + wobble * Math.abs(Math.sin(i * 1.3 + base))), loss: l };
+  });
+  const ok = buckets.filter((b) => b.ms !== null);
+  const seen = buckets.filter((b) => b.loss !== null);
+  return {
+    task, buckets,
+    latest: ok.length ? ok[ok.length - 1].ms : null,
+    avg: ok.length ? Math.round(ok.reduce((x, b) => x + (b.ms ?? 0), 0) / ok.length) : null,
+    loss: seen.length ? Math.round((seen.reduce((x, b) => x + (b.loss ?? 0), 0) / seen.length) * 10) / 10 : 0,
+  };
+}
+const wave = (base: number, amp: number, phase = 0) => Array.from({ length: 24 }, (_, i) => Math.max(0, Math.round(base + amp * Math.sin(i / 2.2 + phase) + (amp / 2) * Math.sin(i * 1.7 + phase))));
 export const demoStatus: StatusMap = {
-  "7f3c-hk02": st({ uuid: "7f3c-hk02", cpu: 23, ram: [3328599654, 8589934592], disk: [44023414784, 85899345920], load: [0.42, 0.51, 0.47], up: 1887436, down: 6710886, totalUp: 335007449088, totalDown: 734439407616, trafficLimit: 1099511627776, trafficType: "max", uptimeSec: 37 * D, tcp: 412, udp: 18, netHistory: [3, 4, 4, 5, 6, 5, 4, 3, 3, 2, 2, 3, 5, 7, 9, 8, 7, 8, 9, 10, 8, 7, 8, 8] }),
-  "2a91-hk01": st({ uuid: "2a91-hk01", cpu: 41, ram: [5583457484, 8589934592], disk: [55834574848, 85899345920], load: [1.12, 1.12, 1.12], up: 3355443, down: 10276044, totalUp: 558345748480, totalDown: 923417968640, trafficLimit: 1099511627776, trafficType: "max", uptimeSec: 88 * D, tcp: 960, udp: 4, netHistory: [5, 6, 7, 6, 8, 9, 8, 7, 9, 10, 11, 9, 8, 9, 10, 12, 11, 10, 9, 10, 11, 12, 10, 9] }),
-  "c0de-sgpg": st({ uuid: "c0de-sgpg", cpu: 12, ram: [12240656793, 17179869184], disk: [201863462912, 343597383680], load: [0.36, 0.36, 0.36], up: 419430, down: 943718, totalUp: 103079215104, totalDown: 152471339008, trafficLimit: 2199023255552, trafficType: "sum", uptimeSec: 201 * D, tcp: 120, udp: 4, netHistory: [2, 2, 1, 2, 3, 2, 2, 1, 1, 2, 2, 3, 2, 2, 3, 2, 2, 2, 1, 2, 2, 3, 2, 2] }),
-  "9b2e-lalab": st({ uuid: "9b2e-lalab", online: false }),
+  "7f3c-hk02": st({ uuid: "7f3c-hk02", group: "主力", cores: 4, os: "Ubuntu 24.04", region: "🇭🇰", cpu: 23, ram: [3328599654, 8589934592], disk: [44023414784, 85899345920], load: [0.42, 0.51, 0.47], up: 1887436, down: 6710886, totalUp: 335007449088, totalDown: 734439407616, trafficLimit: T1, trafficType: "max", uptimeSec: 37 * D, tcp: 412, udp: 18, process: 141,
+    netHistory: [3, 4, 4, 5, 6, 5, 4, 3, 3, 2, 2, 3, 5, 7, 9, 8, 7, 8, 9, 10, 8, 7, 8, 8], upHistory: wave(1800000, 700000), downHistory: wave(6500000, 2500000, 1), ping: ping("电信 CN2", 32, 14) }),
+  "2a91-hk01": st({ uuid: "2a91-hk01", group: "主力", cores: 4, os: "Ubuntu 24.04", region: "🇭🇰", cpu: 41, ram: [5583457484, 8589934592], disk: [55834574848, 85899345920], load: [1.12, 1.12, 1.12], up: 3355443, down: 10276044, totalUp: 558345748480, totalDown: 923417968640, trafficLimit: T1, trafficType: "max", uptimeSec: 88 * D, tcp: 960, udp: 4, process: 188,
+    netHistory: [5, 6, 7, 6, 8, 9, 8, 7, 9, 10, 11, 9, 8, 9, 10, 12, 11, 10, 9, 10, 11, 12, 10, 9], upHistory: wave(3300000, 900000, 2), downHistory: wave(10000000, 3000000, 0.5), ping: ping("电信 CN2", 28, 10) }),
+  "c0de-sgpg": st({ uuid: "c0de-sgpg", group: "主力", cores: 8, os: "Debian 12", region: "🇸🇬", cpu: 12, ram: [12240656793, 17179869184], disk: [201863462912, 343597383680], load: [0.36, 0.36, 0.36], up: 419430, down: 943718, totalUp: 103079215104, totalDown: 152471339008, trafficLimit: 2 * T1, trafficType: "sum", uptimeSec: 201 * D, tcp: 120, udp: 4, process: 96,
+    netHistory: [2, 2, 1, 2, 3, 2, 2, 1, 1, 2, 2, 3, 2, 2, 3, 2, 2, 2, 1, 2, 2, 3, 2, 2], upHistory: wave(400000, 150000, 3), downHistory: wave(900000, 300000, 1.5) }),
+  "51aa-tyo": st({ uuid: "51aa-tyo", group: "建站", cores: 2, os: "Debian 12", region: "🇯🇵", cpu: 6.4, ram: [612368384, 2147483648], disk: [9663676416, 42949672960], load: [0.08, 0.11, 0.09], up: 96256, down: 31744, totalUp: 1.42 * T1, totalDown: 0.31 * T1, trafficLimit: 0, trafficType: "max", uptimeSec: 64 * D, tcp: 58, udp: 2, process: 72,
+    netHistory: wave(120000, 60000), upHistory: wave(90000, 50000, 0.7), downHistory: wave(30000, 15000, 2.2), ping: ping("联通 9929", 62, 18) }),
+  "e7f0-fra": st({ uuid: "e7f0-fra", group: "备用", cores: 1, os: "Ubuntu 22.04", region: "🇩🇪", cpu: 3.1, ram: [905969664, 2147483648], disk: [467077693440, 536870912000], load: [0.21, 0.18, 0.2], up: 2150, down: 640, totalUp: 41 * G, totalDown: 389 * G, trafficLimit: 2 * T1, trafficType: "max", uptimeSec: 12 * D, tcp: 14, udp: 1, process: 61,
+    netHistory: wave(3000, 2000), upHistory: wave(2000, 1500, 1.1), downHistory: wave(800, 600, 0.3), ping: ping("电信 163", 212, 40, { 7: 6, 15: 4 }) }),
+  "3c3c-sjc": st({ uuid: "3c3c-sjc", group: "备用", cores: 4, os: "Rocky Linux 9", region: "🇺🇸", cpu: 93.4, ram: [6012954214, 8589934592], disk: [60129542144, 107374182400], load: [3.92, 3.41, 2.77], up: 22020096, down: 41943040, totalUp: 352 * G, totalDown: 518 * G, trafficLimit: 1 * T1, trafficType: "sum", uptimeSec: 5 * D + 7200, tcp: 233, udp: 9, process: 312,
+    netHistory: wave(60000000, 20000000), upHistory: wave(21000000, 8000000, 0.4), downHistory: wave(40000000, 15000000, 1.9), ping: ping("移动 CMI", 158, 60, { 3: 10, 4: 25, 18: 8 }, [11]) }),
+  "9b2e-lalab": st({ uuid: "9b2e-lalab", online: false, group: "建站", cores: 1, os: "Alpine 3.20", region: "🇺🇸", totalUp: 61 * G, totalDown: 104 * G, trafficLimit: 500 * G }),
+  "8d8d-lon": st({ uuid: "8d8d-lon", online: false, group: "建站", cores: 1, os: "Alpine 3.20", region: "🇬🇧", totalUp: 12 * G, totalDown: 9 * G, trafficLimit: 0 }),
 };
 
 export const demoSettings: Settings = { ...DEFAULT_SETTINGS, komari: { ...DEFAULT_SETTINGS.komari, url: "https://probe.sak.example" }, atoll: { enabled: true, url: "https://atoll.sak.example", intervalMin: 15 } };
-export const demoKomariInfo = { url: "https://probe.sak.example", hasKey: true, version: "1.2.5 (e446bee)", lastSync: "2026-11-15T03:02:00.000Z", lastError: null, nodes: 4 };
+export const demoKomariInfo = { url: "https://probe.sak.example", hasKey: true, version: "1.2.5 (e446bee)", lastSync: "2026-11-15T03:02:00.000Z", lastError: null, nodes: 8 };
 
 // Atoll (read-only container panel) — demo snapshot. hk-api-01/02 and sg-pg match by public IP;
 // la-lab sits behind NAT on Atoll (no public IPv4 reported) and is bound by hand; fra-edge is not in 方寸.

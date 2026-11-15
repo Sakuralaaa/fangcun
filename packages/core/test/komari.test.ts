@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyKomari, DEFAULT_SETTINGS, komariCycle, komariDate, mapClient, mapStatus, markOverrides, normalizeAsset, restoreKomariField, trafficUsed, type KomariClient } from "../src";
+import { applyKomari, DEFAULT_SETTINGS, komariCycle, komariDate, mapClient, mapStatus, markOverrides, normalizeAsset, restoreKomariField, summarizePing, trafficUsed, type KomariClient } from "../src";
 
 // Shaped like Komari 1.2.5 GET /api/admin/client/list
 const client: KomariClient = {
@@ -64,5 +64,34 @@ describe("Komari 免费机", () => {
     expect(mapClient({ uuid: "f", name: "free", price: -1, billing_cycle: -1 } as KomariClient).price).toBe(0);
     expect(mapClient({ uuid: "g", name: "unset" } as KomariClient).price).toBe(0);
     expect(mapClient({ uuid: "h", name: "paid", price: 12.5 } as KomariClient).price).toBe(12.5);
+  });
+});
+
+describe("延迟/丢包汇总", () => {
+  const from = Date.UTC(2026, 10, 15, 7, 0), to = from + 3_600_000;
+  const t = (min: number) => new Date(from + min * 60_000).toISOString();
+  it("picks the busiest task per node and fills time slots", () => {
+    const p = summarizePing({
+      tasks: [{ id: 1, name: "电信" }, { id: 2, name: "移动" }],
+      records: [
+        { task_id: 1, client: "a", time: t(1), value: 30 }, { task_id: 1, client: "a", time: t(2), value: 50 },
+        { task_id: 1, client: "a", time: t(59), value: -1 }, { task_id: 2, client: "a", time: t(5), value: 300 },
+        { task_id: 2, client: "b", time: t(30), value: -1 },
+      ],
+    }, from, to, 12);
+    expect(p.a).toMatchObject({ task: "电信", latest: 50, avg: 40, loss: 33.3 });
+    expect(p.a.buckets).toHaveLength(12);
+    expect(p.a.buckets[0]).toEqual({ ms: 40, loss: 0 });
+    expect(p.a.buckets[11]).toEqual({ ms: null, loss: 100 });
+    expect(p.a.buckets[5]).toEqual({ ms: null, loss: null });
+    expect(p.b).toMatchObject({ latest: null, avg: null, loss: 100 });
+  });
+  it("is empty without records", () => {
+    expect(summarizePing(null, from, to)).toEqual({});
+    expect(summarizePing({ records: [], tasks: [] }, from, to)).toEqual({});
+  });
+  it("maps group / cores / os / region into the status", () => {
+    const s = mapStatus("7f3c-hk02", { online: true }, { ...client, group: " 主力 " });
+    expect(s).toMatchObject({ group: "主力", cores: 4, os: "Ubuntu 24.04", region: "🇭🇰" });
   });
 });

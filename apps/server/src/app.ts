@@ -365,7 +365,7 @@ export function createApp({ store, komari, backup, rates, atoll, webDir, secureC
     const st = komari.state;
     return c.json({
       url: s.url, hasKey: Boolean(process.env.KOMARI_API_KEY) || st.hasKey, version: st.version ?? null,
-      lastSync: st.lastSync ?? store.meta("komari_last_sync") ?? null, lastError: st.lastError ?? null, nodes: st.nodes ?? null,
+      lastSync: st.lastSync ?? store.meta("komari_last_sync") ?? null, lastError: st.lastError ?? null, nodes: st.nodes ?? null, ping: st.ping ?? null,
     });
   });
   app.get("/api/komari/nodes", async (c) => {

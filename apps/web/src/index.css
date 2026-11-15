@@ -49,6 +49,17 @@
   --color-t-document: #5f5a52;
   --color-t-document-soft: #eeece8;
 
+  /* probe meters: hue tells the metric apart; warn / crit stay reserved for high usage and due dates */
+  --color-p-cpu: #3b74d9;
+  --color-p-cpu-soft: #e7eefb;
+  --color-p-mem: #7b5ce0;
+  --color-p-mem-soft: #efeafc;
+  --color-p-disk: #0d93a0;
+  --color-p-disk-soft: #e0f3f4;
+  --color-p-load: #5a6b8c;
+  --color-p-mid: #7f9a12;
+  --color-p-track: #ecebe6;
+
   --radius-sm: 8px;
   --radius-md: 12px;
 }
@@ -92,6 +103,15 @@
   --color-t-payment-soft: #182629;
   --color-t-document: #bdb6aa;
   --color-t-document-soft: #24221f;
+  --color-p-cpu: #6fa0ff;
+  --color-p-cpu-soft: #19243a;
+  --color-p-mem: #a68cff;
+  --color-p-mem-soft: #241e3c;
+  --color-p-disk: #3cc5d2;
+  --color-p-disk-soft: #12292d;
+  --color-p-load: #9aa8c6;
+  --color-p-mid: #c2d94a;
+  --color-p-track: #23262e;
 }
 
 html, body, #root { height: 100%; }

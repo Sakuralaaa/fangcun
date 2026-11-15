@@ -1,5 +1,5 @@
 import { stableJson } from "./asset";
-import type { Asset, Cycle, KomariFieldGroup, KomariSettings, NodeStatus } from "./types";
+import type { Asset, Cycle, KomariFieldGroup, KomariSettings, NodePing, NodeStatus } from "./types";
 
 /** A client as returned by Komari 1.2.5 GET /api/admin/client/list (token is dropped on arrival). */
 export interface KomariClient {
@@ -236,7 +236,7 @@ export function formatKomariValue(key: string, v: unknown, currency = "USD"): st
 
 const TRAFFIC_TYPES = ["sum", "max", "min", "up", "down"] as const;
 
-export function mapStatus(uuid: string, r: KomariRecord, client?: KomariClient, history: number[] = []): NodeStatus {
+export function mapStatus(uuid: string, r: KomariRecord, client?: KomariClient, history: number[] = [], split?: { up: number[]; down: number[] }): NodeStatus {
   const udp = Number(r.connections_udp ?? 0);
   const tt = TRAFFIC_TYPES.find((t) => t === client?.traffic_limit_type) ?? "max";
   return {
@@ -259,7 +259,65 @@ export function mapStatus(uuid: string, r: KomariRecord, client?: KomariClient, 
     process: Number(r.process ?? 0),
     updatedAt: r.time,
     netHistory: history,
+    ...(split ? { upHistory: split.up, downHistory: split.down } : {}),
+    ...(client?.group?.trim() ? { group: client.group.trim() } : {}),
+    ...(client?.cpu_cores ? { cores: Number(client.cpu_cores) } : {}),
+    ...(client?.os ? { os: client.os } : {}),
+    ...(client?.region ? { region: client.region } : {}),
   };
+}
+
+/** rpc2 common:getRecords {type:"ping"} result in Komari 1.2.5 (web/rpc/jsonrpc/common.record.go). value < 0 = lost. */
+export interface KomariPingRecords {
+  count?: number;
+  records?: { task_id?: number; time?: string; value?: number; client?: string }[];
+  tasks?: { id?: number; name?: string }[];
+}
+
+/**
+ * Per-node ping summary for the card bars. For each node the task with the most samples is used
+ * (a node may be probed by several tasks; mixing them would blend unrelated targets).
+ * Samples are spread over `slots` equal time slots between from and to.
+ */
+export function summarizePing(res: KomariPingRecords | null | undefined, from: number, to: number, slots = 24): Record<string, NodePing> {
+  const names = new Map((res?.tasks ?? []).map((t) => [Number(t.id), String(t.name ?? `任务 ${t.id}`)]));
+  const byNode = new Map<string, Map<number, { t: number; v: number; i: number }[]>>();
+  (res?.records ?? []).forEach((r, i) => {
+    if (!r.client || typeof r.value !== "number") return;
+    const task = Number(r.task_id ?? 0);
+    const t = r.time ? Date.parse(r.time) : NaN;
+    const m = byNode.get(r.client) ?? new Map();
+    const arr = m.get(task) ?? [];
+    arr.push({ t, v: r.value, i });
+    m.set(task, arr);
+    byNode.set(r.client, m);
+  });
+  const span = Math.max(1, to - from);
+  const out: Record<string, NodePing> = {};
+  for (const [uuid, tasks] of byNode) {
+    const [task, samples] = [...tasks.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0])[0];
+    const timed = samples.every((x) => Number.isFinite(x.t));
+    samples.sort((a, b) => (timed ? a.t - b.t : a.i - b.i));
+    const slot = samples.map((x, k) => (timed ? Math.min(slots - 1, Math.max(0, Math.floor(((x.t - from) / span) * slots))) : Math.min(slots - 1, Math.floor((k / samples.length) * slots))));
+    const buckets: NodePing["buckets"] = [];
+    for (let b = 0; b < slots; b++) {
+      const vs = samples.filter((_, k) => slot[k] === b);
+      const ok = vs.filter((x) => x.v >= 0);
+      buckets.push({
+        ms: ok.length ? Math.round(ok.reduce((s, x) => s + x.v, 0) / ok.length) : null,
+        loss: vs.length ? Math.round(((vs.length - ok.length) / vs.length) * 1000) / 10 : null,
+      });
+    }
+    const ok = samples.filter((x) => x.v >= 0);
+    out[uuid] = {
+      task: names.get(task) ?? `任务 ${task}`,
+      latest: ok.length ? ok[ok.length - 1].v : null,
+      avg: ok.length ? Math.round(ok.reduce((s, x) => s + x.v, 0) / ok.length) : null,
+      loss: Math.round(((samples.length - ok.length) / samples.length) * 1000) / 10,
+      buckets,
+    };
+  }
+  return out;
 }
 
 /** Traffic counted the way Komari counts it for the limit (utils/notifier/traffic.go). */

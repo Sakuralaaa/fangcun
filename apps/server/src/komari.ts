@@ -1,23 +1,40 @@
 import {
-  applyKomari, assetFromClient, mapStatus, stableJson,
-  type Asset, type KomariClient, type KomariRecord, type NodeStatus, type Op,
+  applyKomari, assetFromClient, mapStatus, stableJson, summarizePing,
+  type Asset, type KomariClient, type KomariPingRecords, type KomariRecord, type NodePing, type NodeStatus, type Op, type PingState,
 } from "@fangcun/core";
 import { tx } from "./db";
 import { HttpError, type Store } from "./store";
 
 /**
- * Read-only Komari client. Exactly two requests can leave this module:
+ * Read-only Komari client. Only these requests can leave this module:
  *   GET  /api/admin/client/list
- *   POST /api/rpc2  (method common:getNodesLatestStatus or common:getVersion)
+ *   POST /api/rpc2  common:getNodesLatestStatus · common:getVersion
+ *   POST /api/rpc2  common:getRecords, and only with type "ping" (latency history; read-only query)
  * Anything else throws before a socket is opened. No write, exec or terminal endpoint is reachable.
  */
 const ALLOWED_RPC = new Set(["common:getNodesLatestStatus", "common:getVersion"]);
-type Endpoint = { method: "GET"; path: "/api/admin/client/list" } | { method: "POST"; path: "/api/rpc2"; rpc: string };
+/** rpc methods that take params, with the only params shape each may be called with. */
+const PARAM_RPC: Record<string, (p: Record<string, unknown>) => boolean> = {
+  "common:getRecords": (p) =>
+    p.type === "ping" &&
+    Object.keys(p).every((k) => ["type", "hours", "uuid", "task_id", "maxCount"].includes(k)) &&
+    (p.hours === undefined || (Number.isInteger(p.hours) && (p.hours as number) >= 1 && (p.hours as number) <= 24)),
+};
+type Endpoint = { method: "GET"; path: "/api/admin/client/list" } | { method: "POST"; path: "/api/rpc2"; rpc: string; params?: Record<string, unknown> };
 
 export function assertAllowed(e: Endpoint): void {
   if (e.method === "GET" && e.path === "/api/admin/client/list") return;
-  if (e.method === "POST" && e.path === "/api/rpc2" && ALLOWED_RPC.has(e.rpc)) return;
+  if (e.method === "POST" && e.path === "/api/rpc2") {
+    const p = e.params ?? {};
+    if (ALLOWED_RPC.has(e.rpc) && !Object.keys(p).length) return;
+    if (PARAM_RPC[e.rpc]?.(p)) return;
+  }
   throw new Error(`blocked Komari request ${e.method} ${e.path} ${"rpc" in e ? e.rpc : ""}`);
+}
+
+/** Thrown for a JSON-RPC error answer (e.g. method not found on an older Komari). */
+class RpcError extends HttpError {
+  constructor(message: string, public code?: number) { super(502, message); }
 }
 
 export interface KomariState {
@@ -28,13 +45,15 @@ export interface KomariState {
   lastSync?: string;
   lastError?: string;
   nodes?: number;
+  ping?: PingState;
 }
 
 export class KomariService {
   private clients: { at: number; list: KomariClient[] } | null = null;
   private statusCache: { at: number; nodes: Record<string, NodeStatus> } | null = null;
   private inflight: Promise<Record<string, NodeStatus>> | null = null;
-  private history = new Map<string, number[]>();
+  private history = new Map<string, { sum: number[]; up: number[]; down: number[] }>();
+  private pingCache: { at: number; state: PingState; nodes: Record<string, NodePing> } | null = null;
   private timers: NodeJS.Timeout[] = [];
   state: KomariState = { configured: false, url: "", hasKey: false };
 
@@ -59,14 +78,14 @@ export class KomariService {
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
       headers: { Authorization: `Bearer ${this.apiKey}`, Accept: "application/json", ...(e.method === "POST" ? { "Content-Type": "application/json" } : {}) },
-      ...(e.method === "POST" ? { body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: e.rpc, params: {} }) } : {}),
+      ...(e.method === "POST" ? { body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: e.rpc, params: e.params ?? {} }) } : {}),
     });
     if (res.status === 401 || res.status === 403) throw new HttpError(502, "Komari 拒绝了 API Key（需要管理员权限的 API Key）");
     if (!res.ok) throw new HttpError(502, `Komari 返回 ${res.status}`);
     const body = (await res.json()) as unknown;
     if (e.method === "POST") {
-      const r = body as { result?: T; error?: { message?: string } };
-      if (r.error) throw new HttpError(502, `Komari: ${r.error.message ?? "rpc error"}`);
+      const r = body as { result?: T; error?: { message?: string; code?: number } };
+      if (r.error) throw new RpcError(`Komari: ${r.error.message ?? "rpc error"}`, r.error.code);
       return r.result as T;
     }
     return body as T;
@@ -91,23 +110,49 @@ export class KomariService {
     return this.state.version;
   }
 
+  /**
+   * Last hour of ping results for all nodes, one rpc call, cached for a minute.
+   * A failure (older Komari without the method, timeout) only hides the latency row; it never fails the status.
+   */
+  async ping(maxAgeMs = 60_000): Promise<{ state: PingState; nodes: Record<string, NodePing> }> {
+    const c = this.pingCache;
+    // An unsupported server is asked again only every 10 minutes.
+    if (c && Date.now() - c.at < (c.state === "unavailable" ? Math.max(maxAgeMs, 10 * 60_000) : maxAgeMs)) return c;
+    const to = Date.now();
+    let next: { at: number; state: PingState; nodes: Record<string, NodePing> };
+    try {
+      const res = await this.call<KomariPingRecords>({ method: "POST", path: "/api/rpc2", rpc: "common:getRecords", params: { type: "ping", hours: 1, maxCount: 20000 } });
+      const nodes = summarizePing(res, to - 3_600_000, to);
+      next = { at: to, state: Object.keys(nodes).length ? "ok" : "empty", nodes };
+    } catch {
+      next = { at: to, state: "unavailable", nodes: c?.state === "ok" ? c.nodes : {} };
+    }
+    this.pingCache = next;
+    this.state.ping = next.state;
+    return next;
+  }
+
   /** Latest status of every node. Served from cache unless older than maxAgeMs; concurrent callers share one request. */
-  async status(maxAgeMs = 8_000): Promise<{ at: string; nodes: Record<string, NodeStatus> }> {
-    if (this.statusCache && Date.now() - this.statusCache.at < maxAgeMs) return { at: new Date(this.statusCache.at).toISOString(), nodes: this.statusCache.nodes };
+  async status(maxAgeMs = 8_000): Promise<{ at: string; nodes: Record<string, NodeStatus>; ping: PingState | null }> {
+    if (this.statusCache && Date.now() - this.statusCache.at < maxAgeMs) return { at: new Date(this.statusCache.at).toISOString(), nodes: this.statusCache.nodes, ping: this.pingCache?.state ?? null };
     this.inflight ??= (async () => {
       try {
-        const [records, clients] = await Promise.all([
+        const [records, clients, ping] = await Promise.all([
           this.call<Record<string, KomariRecord>>({ method: "POST", path: "/api/rpc2", rpc: "common:getNodesLatestStatus" }),
           this.listClients(10 * 60_000).catch(() => [] as KomariClient[]),
+          this.ping().catch(() => null),
         ]);
         const byId = new Map(clients.map((c) => [c.uuid, c]));
         const nodes: Record<string, NodeStatus> = {};
         for (const [uuid, r] of Object.entries(records ?? {})) {
-          const h = this.history.get(uuid) ?? [];
-          h.push(Number(r.net_in ?? 0) + Number(r.net_out ?? 0));
-          while (h.length > 24) h.shift();
+          const h = this.history.get(uuid) ?? { sum: [], up: [], down: [] };
+          const up = Number(r.net_out ?? 0), down = Number(r.net_in ?? 0);
+          h.sum.push(up + down); h.up.push(up); h.down.push(down);
+          for (const k of ["sum", "up", "down"] as const) while (h[k].length > 24) h[k].shift();
           this.history.set(uuid, h);
-          nodes[uuid] = mapStatus(uuid, r, byId.get(uuid), [...h]);
+          const n = mapStatus(uuid, r, byId.get(uuid), [...h.sum], { up: [...h.up], down: [...h.down] });
+          const p = ping?.nodes[uuid];
+          nodes[uuid] = p ? { ...n, ping: p } : n;
         }
         this.statusCache = { at: Date.now(), nodes };
         this.state.lastError = undefined;
@@ -120,7 +165,7 @@ export class KomariService {
       }
     })();
     const nodes = await this.inflight;
-    return { at: new Date(this.statusCache?.at ?? Date.now()).toISOString(), nodes };
+    return { at: new Date(this.statusCache?.at ?? Date.now()).toISOString(), nodes, ping: this.pingCache?.state ?? null };
   }
 
   /** Pull node info and update every bound asset. Writes go through the audit log as 「Komari 同步」. */
@@ -190,5 +235,5 @@ export class KomariService {
     for (const t of this.timers) t.unref();
   }
   stop() { this.timers.forEach(clearInterval); this.timers = []; }
-  resetCache() { this.clients = null; this.statusCache = null; }
+  resetCache() { this.clients = null; this.statusCache = null; this.pingCache = null; }
 }

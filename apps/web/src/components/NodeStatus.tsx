@@ -1,30 +1,28 @@
-import { trafficUsed } from "@fangcun/core";
 import clsx from "clsx";
-import { ArrowDown, ArrowUp, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import type { Asset, NodeStatus } from "../data/types";
 import { useData, useLiveStatus } from "../lib/store";
+import { bytes, detail, Flag, nodeOs, nodeRegion, OsMark, regionCode } from "./probe";
+import { Chip, Meters, nodeView, PingCells, QuotaRow, SpeedCell, TotalCell } from "./probeBlocks";
 import { Card, KomariBadge } from "./ui";
 
-const G = 1024 ** 3;
-export const gb = (b: number) => (b >= 1024 * G ? `${(b / 1024 / G).toFixed(2)} TB` : b >= G ? `${Math.round(b / G)} GB` : `${Math.round(b / 1024 ** 2)} MB`);
-const gb1 = (b: number) => `${(b / G).toFixed(1)} GB`;
-export const speed = (b: number) => (b >= 1024 ** 2 ? `${(b / 1024 ** 2).toFixed(1)} MB/s` : `${Math.round(b / 1024)} KB/s`);
 const typeLabel = { sum: "上下行合计", max: "取上下行较大者", min: "取上下行较小者", up: "只算上行", down: "只算下行" };
 export const hhmm = (iso?: string | null) => (iso ? new Date(iso).toTimeString().slice(0, 5) : "—");
 export const pctOf = (a: number, b: number) => (b > 0 ? Math.min(100, Math.round((a / b) * 100)) : 0);
 
+/** 运行状态 on a VPS: the same meters, bars and colours as the 服务器 page cards. */
 export function NodeStatusCard({ asset, status: s }: { asset: Asset; status?: NodeStatus }) {
   useLiveStatus();
-  const { statusAt, refreshStatus } = useData();
+  const { statusAt, refreshStatus, pingState } = useData();
   const [spin, setSpin] = useState(false);
   const k = asset.komari!;
-  const online = Boolean(s?.online);
+  const v = nodeView(asset, s);
   const head = (
     <span className="flex items-center gap-2.5">
       运行状态
       <span className="flex items-center gap-1.5 text-xs font-normal text-muted">
-        <span className={clsx("size-1.5 rounded-full", online ? "bg-ok" : "bg-subtle")} />{s ? (online ? "在线" : "离线") : "未获取"}
+        <span className={clsx("size-1.5 rounded-full", v.on ? "bg-ok" : "bg-subtle")} />{s ? (v.on ? "在线" : "离线") : "未获取"}
       </span>
     </span>
   );
@@ -36,75 +34,52 @@ export function NodeStatusCard({ asset, status: s }: { asset: Asset; status?: No
       </button>
     </>
   );
-  if (!s || !online) return <Card title={head} extra={extra}><p className="text-[13px] text-subtle">{s ? "节点离线，下面显示的是最后一次同步的配置。" : "还没有拿到这个节点的状态（探针未连接或节点不存在）。"}</p></Card>;
-  const used = trafficUsed(s);
-  const pct = pctOf(used, s.trafficLimit);
   const reset = k.trafficResetDay ? `每月 ${k.trafficResetDay} 日重置` : "重置日未填写";
+  const showPing = pingState === "ok";
   return (
     <Card title={head} extra={extra}>
-      <div className="grid grid-cols-[1.25fr_1fr] gap-6">
-        <div>
-          <div className="flex items-baseline justify-between text-xs text-subtle">
-            <span>本月流量 <span className="ml-1">{typeLabel[s.trafficType]}</span></span>
-            <span>{reset}</span>
+      {!v.on && (
+        <p className="mb-3 rounded-sm bg-field px-3 py-2 text-[12.5px] text-muted">
+          {s ? "节点离线，下面是最后一次同步到的数据。" : "还没有拿到这个节点的状态（探针未连接或节点不存在）。"}
+        </p>
+      )}
+      <div className={clsx("grid grid-cols-1 gap-y-5 lg:grid-cols-3 lg:divide-x lg:divide-line", !v.on && "opacity-60 grayscale")}>
+        <Col className="lg:pr-6">
+          <div className="mb-3 flex items-center gap-2 text-[12px] text-muted">
+            <Flag region={nodeRegion(asset, s)} />
+            <span className="truncate">{[detail(asset, "地区") || (regionCode(nodeRegion(asset, s)) ?? ""), nodeOs(asset, s)].filter(Boolean).join(" · ") || "地区、系统未知"}</span>
+            {s?.group && <Chip>{s.group}</Chip>}
+            <OsMark os={nodeOs(asset, s)} className="ml-auto size-7" />
           </div>
-          <div className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="text-[22px] font-bold tracking-tight tnum">{gb(used)}</span>
-            <span className="text-[13px] text-subtle tnum">/ {s.trafficLimit ? gb(s.trafficLimit) : "不限"}</span>
-            {s.trafficLimit > 0 && <span className={clsx("ml-auto text-[13px] font-semibold tnum", pct >= 90 ? "text-crit" : pct >= 75 ? "text-warn" : "text-muted")}>{pct}%</span>}
+          <Meters v={v} />
+        </Col>
+        <Col className="lg:px-6">
+          <div className="grid grid-cols-2 gap-x-5"><SpeedCell dir="up" v={v} /><SpeedCell dir="down" v={v} /></div>
+          <div className="mt-3 grid grid-cols-2 gap-x-5"><TotalCell dir="up" v={v} /><TotalCell dir="down" v={v} /></div>
+          <div className="mt-4"><QuotaRow v={v} label="本月剩余" /></div>
+          <div className="mt-1.5 flex justify-between text-[11.5px] text-subtle"><span>{s ? typeLabel[s.trafficType] : ""}</span><span>{reset}</span></div>
+        </Col>
+        <Col className="lg:pl-6">
+          {showPing ? <PingCells ping={s?.ping} /> : (
+            <p className="text-[12px] text-subtle">{pingState === "empty" ? "Komari 里还没有延迟检测任务，加上后这里显示延迟和丢包。" : "暂时拿不到延迟数据。"}</p>
+          )}
+          {s?.ping && <div className="mt-1.5 truncate text-[11.5px] text-subtle">任务「{s.ping.task}」· 近 1 小时平均 {s.ping.avg ?? "—"} ms</div>}
+          <div className="mt-4 grid grid-cols-4 gap-2 border-t border-line pt-3 text-xs">
+            <Mini label="在线" value={v.on && s ? `${Math.floor(s.uptimeSec / 86400)} 天` : "—"} />
+            <Mini label="连接" value={v.on && s ? `${s.tcp + s.udp}` : "—"} />
+            <Mini label="进程" value={v.on && s ? `${s.process}` : "—"} />
+            <Mini label="交换" value={v.on && s && s.swap[1] ? bytes(s.swap[0]) : "—"} />
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-field">
-            <div className={clsx("h-full rounded-full", pct >= 90 ? "bg-crit" : pct >= 75 ? "bg-warn" : "bg-accent")} style={{ width: `${pct}%` }} />
-          </div>
-          <div className="mt-2 flex gap-4 text-xs text-subtle tnum">
-            <span className="flex items-center gap-1"><ArrowUp size={12} />{gb(s.totalUp)}</span>
-            <span className="flex items-center gap-1"><ArrowDown size={12} />{gb(s.totalDown)}</span>
-          </div>
-          <div className="mt-4 flex items-end justify-between">
-            <div className="text-xs text-subtle">
-              <div className="flex items-center gap-1 text-[13px] text-ink tnum"><ArrowUp size={13} className="text-subtle" />{speed(s.up)}</div>
-              <div className="mt-0.5 flex items-center gap-1 text-[13px] text-ink tnum"><ArrowDown size={13} className="text-subtle" />{speed(s.down)}</div>
-            </div>
-            {s.netHistory.length > 1 && <Spark data={s.netHistory} />}
-          </div>
-        </div>
-        <div className="flex flex-col gap-3 border-l border-line pl-6">
-          <Meter label="CPU" pct={s.cpu} value={`${Math.round(s.cpu)}%`} />
-          <Meter label="内存" pct={pctOf(s.ram[0], s.ram[1])} value={`${gb1(s.ram[0])} / ${gb(s.ram[1])}`} />
-          <Meter label="硬盘" pct={pctOf(s.disk[0], s.disk[1])} value={`${gb(s.disk[0])} / ${gb(s.disk[1])}`} />
-          <div className="mt-1 grid grid-cols-3 gap-2 text-xs">
-            <Mini label="负载" value={s.load[0].toFixed(2)} />
-            <Mini label="连接" value={`${s.tcp + s.udp}`} />
-            <Mini label="在线" value={`${Math.floor(s.uptimeSec / 86400)} 天`} />
-          </div>
-        </div>
+        </Col>
       </div>
     </Card>
   );
 }
 
-function Meter({ label, pct, value }: { label: string; pct: number; value: string }) {
-  return (
-    <div>
-      <div className="flex justify-between text-xs"><span className="text-subtle">{label}</span><span className="text-muted tnum">{value}</span></div>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-field">
-        <div className={clsx("h-full rounded-full", pct >= 90 ? "bg-crit" : "bg-ink/35")} style={{ width: `${Math.min(100, pct)}%` }} />
-      </div>
-    </div>
-  );
+function Col({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={clsx("min-w-0", className)}>{children}</div>;
 }
 
 function Mini({ label, value }: { label: string; value: string }) {
-  return <div><div className="text-subtle">{label}</div><div className="mt-0.5 text-[13px] tnum">{value}</div></div>;
-}
-
-function Spark({ data }: { data: number[] }) {
-  const w = 150, h = 34, max = Math.max(...data, 1);
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * (h - 4) - 2}`).join(" ");
-  return (
-    <svg width={w} height={h} className="text-accent">
-      <polyline points={`0,${h} ${pts} ${w},${h}`} fill="currentColor" opacity="0.1" />
-      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  );
+  return <div className="min-w-0"><div className="text-subtle">{label}</div><div className="mt-0.5 truncate text-[13px] tnum">{value}</div></div>;
 }

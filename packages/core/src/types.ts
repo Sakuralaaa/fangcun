@@ -1,6 +1,6 @@
 /** Data schema version. Bump together with a migration in backup.ts. */
 export const SCHEMA_VERSION = 2;
-export const APP_VERSION = "0.1.3";
+export const APP_VERSION = "0.1.4";
 
 export const ASSET_TYPES = [
   "server", "domain", "cert", "subscription", "mail", "phone", "payment", "account", "document",
@@ -156,7 +156,30 @@ export interface NodeStatus {
   updatedAt?: string;
   /** Recent (down+up) speed samples collected by the 方寸 server. */
   netHistory: number[];
+  /** Recent upload / download speed samples (same cadence as netHistory). */
+  upHistory?: number[];
+  downHistory?: number[];
+  /** From the Komari client record: group, core count, OS and region (often an emoji flag). */
+  group?: string;
+  cores?: number;
+  os?: string;
+  region?: string;
+  /** Latency / loss from Komari ping tasks (rpc2 common:getRecords type=ping); absent when there is none. */
+  ping?: NodePing;
 }
+
+/** One node's ping summary over the last hour. Latency in ms; loss in percent. */
+export interface NodePing {
+  task: string;
+  latest: number | null;
+  avg: number | null;
+  loss: number;
+  /** Oldest → newest; ms null = no successful sample in that slot, loss null = no sample at all. */
+  buckets: { ms: number | null; loss: number | null }[];
+}
+
+/** Whether Komari can give ping data: ok, reachable but no ping task, or the call failed / is unsupported. */
+export type PingState = "ok" | "empty" | "unavailable";
 
 export type TokenScope = "read" | "write" | "full";
 export const SCOPE_LABEL: Record<TokenScope, string> = { read: "只读", write: "可写（需审批）", full: "完全权限" };
