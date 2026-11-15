@@ -58,7 +58,7 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
           <Kpi label="全部资产" value={assets.length} foot={`${types} 种类型${cards.length ? ` · ${cards.length} 张支付卡` : ""}`} />
           <Kpi label="30 天内到期" value={soon.length} foot={soon.length ? `其中 ${manual.length} 项需手动续费` : "近期没有到期"} />
           <Kpi label="每月支出" value={money(Math.round(monthly), cur, { free: false })}
-            foot={unconverted ? `另有 ${unconverted} 未折算` : `一年约 ${money(Math.round(monthly * 12), cur, { free: false })}${total.approx ? " · 按手填汇率" : ""}`} />
+            foot={unconverted ? `另有 ${unconverted} 未折算` : `一年约 ${money(Math.round(monthly * 12), cur, { free: false })}${total.approx ? " · 按汇率估算" : ""}`} />
           <Kpi label="探针节点" value={servers.length ? `${online}/${servers.length}` : "—"} foot={servers.length ? `${servers.length - online} 台离线 · ${hhmm(statusAt ?? komari?.lastSync)} 更新` : komari?.url ? "还没有绑定节点" : "未连接 Komari"} badge />
         </div>
 
@@ -85,7 +85,7 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
           </Card>
 
           <div className="flex min-h-0 flex-col gap-4">
-            <Card title="每月支出构成" extra={<span title={total.approx ? "其他币种按设置里手填的汇率折算，仅作估算" : undefined}>{money(Math.round(monthly), cur, { free: false })}/月</span>} className="shrink-0">
+            <Card title="每月支出构成" extra={<span title={total.approx ? "其他币种按设置里的汇率折算，仅作估算" : undefined}>{money(Math.round(monthly), cur, { free: false })}/月</span>} className="shrink-0">
               {monthly > 0 ? (
                 <>
                   <div className="mb-4 flex h-2.5 overflow-hidden rounded-full">

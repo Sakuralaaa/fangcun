@@ -1,6 +1,6 @@
 /** Data schema version. Bump together with a migration in backup.ts. */
 export const SCHEMA_VERSION = 2;
-export const APP_VERSION = "0.1.0";
+export const APP_VERSION = "0.1.1";
 
 export const ASSET_TYPES = [
   "server", "domain", "cert", "subscription", "mail", "phone", "payment", "account", "document",
@@ -192,8 +192,13 @@ export type KomariFieldGroup = "price" | "cycle" | "expiresAt" | "autoRenew" | "
 export interface DisplaySettings {
   /** Currency used for overview totals. */
   currency: string;
-  /** Hand-typed rates: how many units of each currency equal 1 display currency. Only for 约 totals. */
+  /** How many units of each currency equal 1 display currency. Only for 约 totals; asset prices are never converted. */
   rates: Record<string, number>;
+  /** Fetch rates automatically (ECB via Frankfurter, fallback open.er-api). When false, rates are hand-typed. */
+  autoRates: boolean;
+  /** When the automatic rates were last fetched (ISO) and from where. */
+  ratesUpdatedAt?: string;
+  ratesSource?: string;
 }
 
 export interface BackupSettings { keep: number; hour: number }
@@ -210,7 +215,7 @@ export const DEFAULT_SETTINGS: Settings = {
     intervalMin: 30,
     fields: { price: true, cycle: true, expiresAt: true, autoRenew: true, specs: true, network: true, tags: false },
   },
-  display: { currency: "USD", rates: { USD: 1, CNY: 7.2, HKD: 7.8, EUR: 0.92, GBP: 0.79, JPY: 150 } },
+  display: { currency: "USD", rates: { USD: 1, CNY: 7.2, HKD: 7.8, EUR: 0.92, GBP: 0.79, JPY: 150 }, autoRates: true },
   backup: { keep: 30, hour: 4 },
 };
 

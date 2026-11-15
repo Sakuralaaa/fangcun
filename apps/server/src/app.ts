@@ -15,14 +15,15 @@ import {
 } from "./auth";
 import type { BackupService } from "./backup";
 import type { KomariService } from "./komari";
+import type { RatesService } from "./rates";
 import { HttpError, toPublic, type CommitResult, type Store } from "./store";
 
 type Env = { Variables: { actor: Actor; session?: SessionRow } };
 const COOKIE = "fc_session";
 
-export interface AppDeps { store: Store; komari: KomariService; backup: BackupService; webDir?: string; secureCookie?: boolean }
+export interface AppDeps { store: Store; komari: KomariService; backup: BackupService; rates?: RatesService; webDir?: string; secureCookie?: boolean }
 
-export function createApp({ store, komari, backup, webDir, secureCookie }: AppDeps) {
+export function createApp({ store, komari, backup, rates, webDir, secureCookie }: AppDeps) {
   const app = new Hono<Env>();
   const loginLimit = new Limiter(10, 15 * 60_000);
   const db = store.db;
@@ -334,9 +335,22 @@ export function createApp({ store, komari, backup, webDir, secureCookie }: AppDe
     next.backup.keep = Math.min(365, Math.max(1, Math.floor(next.backup.keep)));
     next.backup.hour = Math.min(23, Math.max(0, Math.floor(next.backup.hour)));
     next.komari.intervalMin = Math.min(1440, Math.max(5, Math.floor(next.komari.intervalMin)));
+    // the server owns the fetched-at stamp; a client can't fake it
+    next.display.ratesUpdatedAt = cur.display.ratesUpdatedAt;
+    next.display.ratesSource = cur.display.ratesSource;
+    if (next.display.autoRates) next.display.rates = cur.display.currency === next.display.currency ? cur.display.rates : next.display.rates;
     store.saveSettings(next);
+    if (next.display.autoRates && (!cur.display.autoRates || cur.display.currency !== next.display.currency)) await rates?.refresh();
     if (cur.komari.url !== next.komari.url || cur.komari.intervalMin !== next.komari.intervalMin) { komari.resetCache(); komari.start(); }
-    return c.json({ settings: next });
+    return c.json({ settings: store.settings() });
+  });
+  app.post("/api/settings/rates/refresh", async (c) => {
+    need(c, "admin");
+    if (!rates) throw new HttpError(503, "汇率服务未启用");
+    if (!store.settings().display.autoRates) throw new HttpError(400, "自动汇率已关闭");
+    await rates.refresh();
+    if (rates.lastError) throw new HttpError(502, `汇率更新失败：${rates.lastError}`);
+    return c.json({ settings: store.settings() });
   });
 
   // ---------- Komari (read-only proxy) ----------

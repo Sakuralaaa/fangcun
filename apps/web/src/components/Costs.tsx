@@ -18,7 +18,7 @@ export function Costs({ onSelect }: { onSelect: (id: string) => void }) {
       <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 px-8 py-7">
         <div>
           <h1 className="text-[24px] font-bold tracking-tight">费用</h1>
-          <p className="mt-1 text-[13px] text-subtle">价格按实付记录，各币种分开合计；折算只用你在设置里手填的汇率。</p>
+          <p className="mt-1 text-[13px] text-subtle">价格按实付记录，各币种分开合计；其他币种按设置里的汇率（默认自动更新）估算折合。</p>
         </div>
         <div className="grid grid-cols-3 divide-x divide-line rounded-md border border-line bg-panel">
           <Kpi label="每月（各币种）" value={fmtMap(byCur)} foot={`${billed.length} 项计费资产`} />

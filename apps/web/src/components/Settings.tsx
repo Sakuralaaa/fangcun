@@ -52,30 +52,49 @@ const demoOnly = (demo: boolean) => demo && <p className="rounded-sm bg-field px
 
 // ---------------- 常规 ----------------
 function General() {
-  const { settings, saveSettings, toast, demo } = useData();
+  const { settings, saveSettings, toast, demo, reload } = useData();
   const [d, setD] = useState<S["display"]>(settings.display);
-  const [rates, setRates] = useState(Object.entries(settings.display.rates).map(([k, v]) => `${k}=${v}`).join("\n"));
-  useEffect(() => setD(settings.display), [settings.display]);
-  const save = async () => {
+  const toText = (r: Record<string, number>) => Object.entries(r).map(([k, v]) => `${k}=${v}`).join("\n");
+  const [rates, setRates] = useState(toText(settings.display.rates));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setD(settings.display); setRates(toText(settings.display.rates)); }, [settings.display]);
+  const save = async (patch: Partial<S["display"]> = {}) => {
     const r: Record<string, number> = {};
     for (const line of rates.split("\n")) {
       const [k, v] = line.split("=").map((s) => s.trim());
       if (k && Number(v) > 0) r[k.toUpperCase()] = Number(v);
     }
-    try { await saveSettings({ ...settings, display: { currency: d.currency.toUpperCase(), rates: r } }); } catch (e) { toast((e as Error).message, "err"); }
+    const next = { ...d, ...patch, currency: (patch.currency ?? d.currency).toUpperCase(), rates: r };
+    try { await saveSettings({ ...settings, display: next }); toast("已保存"); } catch (e) { toast((e as Error).message, "err"); }
   };
+  const refresh = async () => {
+    if (demo) return;
+    setBusy(true);
+    try { await post("/api/settings/rates/refresh"); await reload(); toast("汇率已更新"); } catch (e) { toast((e as Error).message, "err"); }
+    setBusy(false);
+  };
+  const auto = d.autoRates;
+  const when = settings.display.ratesUpdatedAt ? new Date(settings.display.ratesUpdatedAt).toLocaleString("zh-CN", { hour12: false }) : null;
   return (
     <>
-      <Title sub="价格一律按实付手填，不做自动换算。下面的汇率只用于总览里的「约」合计。">常规</Title>
+      <Title sub="价格一律按实付手填，不做换算。汇率只用于总览里的「约」合计。">常规</Title>
       {demoOnly(demo)}
       <Card title="合计用的币种与汇率">
         <div className="grid grid-cols-[200px_1fr] gap-4">
-          <Field label="合计币种"><TextInput value={d.currency} onChange={(v) => setD({ ...d, currency: v })} mono /></Field>
-          <Field label="汇率" hint="每行 币种=多少单位等于 1 个基准单位（自己填，按需更新）">
-            <textarea value={rates} onChange={(e) => setRates(e.target.value)} rows={6} className="w-full rounded-sm border border-line bg-field px-3 py-2 font-mono text-[12.5px] outline-none" />
+          <div className="space-y-4">
+            <Field label="合计币种"><TextInput value={d.currency} onChange={(v) => setD({ ...d, currency: v })} mono /></Field>
+            <Field label="自动更新汇率" hint="每 6 小时从欧洲央行参考汇率（Frankfurter）拉取，缺的币种用 open.er-api 补">
+              <Toggle on={auto} onChange={(v) => { setD({ ...d, autoRates: v }); void save({ autoRates: v }); }} />
+            </Field>
+          </div>
+          <Field label="汇率" hint={auto ? (when ? `1 ${settings.display.currency} 等于多少单位 · ${when} 更新 · ${settings.display.ratesSource ?? ""}` : "还没拉取过，点右下角「立即更新」") : "每行 币种=多少单位等于 1 个合计币种（手动维护）"}>
+            <textarea value={rates} readOnly={auto} onChange={(e) => setRates(e.target.value)} rows={7} className={clsx("w-full rounded-sm border border-line bg-field px-3 py-2 font-mono text-[12.5px] outline-none", auto && "text-muted")} />
           </Field>
         </div>
-        <div className="mt-3 flex justify-end"><Button variant="primary" onClick={save}>保存</Button></div>
+        <div className="mt-3 flex justify-end gap-2">
+          {auto && <Button icon={<RefreshCw size={14} className={clsx(busy && "animate-spin")} />} onClick={refresh} disabled={busy || demo}>立即更新</Button>}
+          <Button variant="primary" onClick={() => save()}>保存</Button>
+        </div>
       </Card>
     </>
   );
