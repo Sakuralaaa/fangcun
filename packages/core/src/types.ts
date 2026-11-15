@@ -1,6 +1,6 @@
 /** Data schema version. Bump together with a migration in backup.ts. */
 export const SCHEMA_VERSION = 2;
-export const APP_VERSION = "0.1.2";
+export const APP_VERSION = "0.1.3";
 
 export const ASSET_TYPES = [
   "server", "domain", "cert", "subscription", "mail", "phone", "payment", "account", "document",
@@ -45,6 +45,12 @@ export interface KomariLink {
   /** Day of month the provider resets traffic (typed by hand in 方寸). */
   trafficResetDay?: number;
 }
+
+/**
+ * Manual Atoll binding on a server asset. Absent = match by public IP automatically;
+ * `serverId: null` = this VPS is deliberately not linked to any Atoll server.
+ */
+export interface AtollLink { serverId: string | null }
 
 export interface TeamMember {
   email: string;
@@ -118,6 +124,7 @@ export interface Asset {
   note?: string;
   renewals: Renewal[];
   komari?: KomariLink | null;
+  atoll?: AtollLink | null;
   team?: Team | null;
   account?: AccountInfo | null;
   payment?: PaymentInfo | null;
@@ -203,10 +210,18 @@ export interface DisplaySettings {
 
 export interface BackupSettings { keep: number; hour: number }
 
+/** Atoll panel (read-only). The API key only comes from the server's ATOLL_API_KEY environment variable. */
+export interface AtollSettings {
+  enabled: boolean;
+  url: string;
+  intervalMin: number;
+}
+
 export interface Settings {
   komari: KomariSettings;
   display: DisplaySettings;
   backup: BackupSettings;
+  atoll: AtollSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -217,6 +232,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   display: { currency: "USD", rates: { USD: 1, CNY: 7.2, HKD: 7.8, EUR: 0.92, GBP: 0.79, JPY: 150 }, autoRates: true },
   backup: { keep: 30, hour: 4 },
+  atoll: { enabled: true, url: "", intervalMin: 15 },
 };
 
 /** The JSON document inside a .fangcun backup and the JSON export. */

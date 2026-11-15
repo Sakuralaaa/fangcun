@@ -6,6 +6,7 @@ import type { Asset } from "../data/types";
 import { api } from "../lib/api";
 import { cycleLabel, daysUntil, dueLabel, getToday, money, urgency, ymd } from "../lib/fmt";
 import { useData } from "../lib/store";
+import { AtollDomainCard, AtollImpact, AtollProjectsCard } from "./Atoll";
 import { NodeStatusCard } from "./NodeStatus";
 import { QuotaCard } from "./Quota";
 import { TeamCard } from "./Team";
@@ -64,6 +65,7 @@ export function AssetDetail({ asset: a, onSelect, onEdit }: { asset: Asset; mode
               <p className="mt-0.5 truncate text-[13px] text-muted">{[a.subtitle, a.provider].filter(Boolean).join(" · ")}{a.tags.length > 0 && <span className="text-subtle"> · {a.tags.map((t) => `#${t}`).join("  ")}</span>}</p>
             </div>
             <div className="flex items-center gap-2">
+              {d <= 30 && <AtollImpact asset={a} />}
               {d <= 30 && <Pill tone={u} dot>{d < 0 ? dueLabel(a) : `${dueLabel(a)}后到期`}</Pill>}
               {a.payment && a.payment.status !== "active" && <Pill tone="none">{CARD_STATUS_LABEL[a.payment.status]}</Pill>}
               <Button icon={<Pencil size={14} />} onClick={onEdit}>编辑</Button>
@@ -87,6 +89,8 @@ export function AssetDetail({ asset: a, onSelect, onEdit }: { asset: Asset; mode
           )}
 
           {a.komari && <NodeStatusCard asset={a} status={stat} />}
+          {a.type === "server" && <AtollProjectsCard asset={a} onSelect={onSelect} />}
+          {a.type === "domain" && <AtollDomainCard asset={a} onSelect={onSelect} />}
           {a.team && <TeamCard team={a.team} />}
           {a.quota && <QuotaCard quota={a.quota} />}
 

@@ -251,7 +251,7 @@ export class Store {
         const st = this.db.prepare("INSERT INTO audit (id, at, actor, action, asset_id, summary, before, after, changeset_id, undone_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         for (const e of audit) st.run(e.id, e.at, e.actor, e.action, e.assetId, e.summary, e.before ? JSON.stringify(e.before) : null, e.after ? JSON.stringify(e.after) : null, e.changesetId ?? null, e.undoneBy ?? null);
       }
-      if (settings) { const s = this.settings(); this.saveSettings({ ...settings, komari: { ...settings.komari, url: settings.komari.url || s.komari.url } }); }
+      if (settings) { const s = this.settings(); const m = mergeSettings(settings); this.saveSettings({ ...m, komari: { ...m.komari, url: m.komari.url || s.komari.url }, atoll: { ...m.atoll, url: m.atoll.url || s.atoll.url } }); }
       this.audit(actor, "restore-backup", null, summary, null, null);
     });
   }

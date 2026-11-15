@@ -14,7 +14,7 @@
 
 | type | 名称 | 关键字段 |
 | --- | --- | --- |
-| `server` | 服务器 | `details`：IPv4 / IPv6 / 地区 / CPU / 内存 / 硬盘 / 系统；`komari.uuid` 绑定探针；`komari.trafficResetDay` 流量重置日 |
+| `server` | 服务器 | `details`：IPv4 / IPv6 / 地区 / CPU / 内存 / 硬盘 / 系统；`komari.uuid` 绑定探针；`komari.trafficResetDay` 流量重置日；`atoll.serverId` 手动指定对应的 Atoll 服务器（`null` = 不关联，不填 = 按公网 IP 自动匹配） |
 | `domain` | 域名 | `details`：DNS、注册人、实名、转移锁 |
 | `cert` | 证书 | `details`：域名、签发者、类型、部署在；通常 `cycle: quarter`、`price: 0` |
 | `subscription` | 订阅 | `team`（团队订阅）：`owner` 母号，`workspaces[]` 各自 `seats / price / currency / cycle / expiresAt / region / discount / members[]` |

@@ -109,6 +109,7 @@ export function mergeSettings(s?: Partial<Settings>): Settings {
     komari: { ...d.komari, ...s.komari, fields: { ...d.komari.fields, ...s.komari?.fields } },
     display: { ...d.display, ...s.display, rates: { ...d.display.rates, ...s.display?.rates } },
     backup: { ...d.backup, ...s.backup },
+    atoll: { ...d.atoll, ...s.atoll },
   };
 }
 

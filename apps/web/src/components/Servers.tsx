@@ -6,13 +6,17 @@ import type { Asset, NodeStatus } from "../data/types";
 import { daysUntil, dueLabel, perCycle, urgency } from "../lib/fmt";
 import { useData, useLiveStatus } from "../lib/store";
 import { gb, hhmm, pctOf, speed } from "./NodeStatus";
+import { useAtollOn } from "./Atoll";
 import { KomariBadge, urgencyText } from "./ui";
 
 const region = (a: Asset) => a.details.find((d) => d.label === "地区")?.value ?? "";
 
 export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
   useLiveStatus();
-  const { assets, status, statusAt, refreshStatus, settings } = useData();
+  const { assets, status, statusAt, refreshStatus, settings, atollView } = useData();
+  const atollOn = useAtollOn();
+  /** Atoll project count for a VPS, only when it matches an Atoll server. */
+  const projCount = (a: Asset) => (atollOn && atollView.projectsByAsset.has(a.id) ? atollView.projectsByAsset.get(a.id)!.length : null);
   const [spin, setSpin] = useState(false);
   const [view, setView] = useState<"grid" | "list">("grid");
   const st = (a: Asset) => (a.komari ? status[a.komari.uuid] : undefined);
@@ -53,7 +57,7 @@ export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
         {!servers.length && <p className="rounded-md border border-dashed border-line px-6 py-10 text-center text-[13px] text-subtle">还没有服务器。到「设置 → Komari 探针」把节点一键导入，或在资产里手动添加。</p>}
         {view === "grid" ? (
           <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
-            {servers.map((a) => <NodeCard key={a.id} a={a} s={st(a)} onClick={() => onSelect(a.id)} />)}
+            {servers.map((a) => <NodeCard key={a.id} a={a} s={st(a)} projects={projCount(a)} onClick={() => onSelect(a.id)} />)}
           </div>
         ) : (
           <div className="overflow-hidden rounded-md border border-line bg-panel">
@@ -65,7 +69,7 @@ export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
                   <span className="text-muted tnum">{s?.online ? `${Math.round(s.cpu)}%` : "—"}</span>
                   <span className="text-muted tnum">{s?.online ? `${pctOf(s.ram[0], s.ram[1])}%` : "—"}</span>
                   <span className="text-muted tnum">{s?.online ? `${pctOf(s.disk[0], s.disk[1])}%` : "—"}</span>
-                  <span className="truncate text-xs text-subtle">{region(a)} · {a.provider}</span>
+                  <span className="truncate text-xs text-subtle">{[region(a), a.provider, projCount(a) != null && `${projCount(a)} 个 Atoll 项目`].filter(Boolean).join(" · ")}</span>
                   <span className={clsx("text-right text-xs tnum", urgencyText[urgency(a)])}>{dueLabel(a)}</span>
                 </button>
               );
@@ -87,7 +91,7 @@ function Kpi({ label, value, foot }: { label: string; value: React.ReactNode; fo
   );
 }
 
-function NodeCard({ a, s, onClick }: { a: Asset; s?: NodeStatus; onClick: () => void }) {
+function NodeCard({ a, s, projects, onClick }: { a: Asset; s?: NodeStatus; projects: number | null; onClick: () => void }) {
   const u = urgency(a);
   const on = Boolean(s?.online);
   const tPct = s ? pctOf(trafficUsed(s), s.trafficLimit) : 0;
@@ -97,7 +101,7 @@ function NodeCard({ a, s, onClick }: { a: Asset; s?: NodeStatus; onClick: () => 
         <span className={clsx("mt-1.5 size-2 shrink-0 rounded-full", on ? "bg-ok" : "bg-subtle")} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-mono text-[14px] font-semibold">{a.name}</div>
-          <div className="truncate text-xs text-subtle">{[region(a), a.provider].filter(Boolean).join(" · ")}</div>
+          <div className="truncate text-xs text-subtle">{[region(a), a.provider].filter(Boolean).join(" · ")}{projects != null && <span title="这台机器上的 Atoll 项目"> · {projects} 个 Atoll 项目</span>}</div>
         </div>
         <div className="text-right">
           <div className={clsx("text-xs tnum", u === "crit" || u === "warn" ? "font-semibold" : "", urgencyText[u])}>{dueLabel(a)}</div>

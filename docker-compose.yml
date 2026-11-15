@@ -10,6 +10,8 @@ services:
       TZ: Asia/Shanghai              # 每日自动备份按这个时区判断「今天」
       # Komari 管理员 API Key（只读使用）；不接 Komari 可删掉这一行
       KOMARI_API_KEY: ${KOMARI_API_KEY:-}
+      # Atoll 只读 API 令牌（在 Atoll「连接 → API 令牌」创建，权限选「只读」）；不接 Atoll 可删掉这一行
+      ATOLL_API_KEY: ${ATOLL_API_KEY:-}
       # 放在 HTTPS 反向代理后面时设为 1，会话 cookie 带 Secure
       COOKIE_SECURE: ${COOKIE_SECURE:-}
     volumes:

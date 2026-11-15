@@ -112,6 +112,9 @@ export function normalizeAsset(input: AssetInput & Partial<Asset>, now = new Dat
           ...(input.komari.trafficResetDay ? { trafficResetDay: clampDay(input.komari.trafficResetDay) } : {}),
         }
       : null,
+    atoll: type === "server" && input.atoll && typeof input.atoll === "object" && "serverId" in input.atoll
+      ? { serverId: input.atoll.serverId === null ? null : str(input.atoll.serverId, 100) ?? null }
+      : null,
     team: null,
     account: null,
     payment: null,

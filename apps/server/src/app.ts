@@ -13,6 +13,7 @@ import {
   createAccessToken, createSession, findAccessToken, findSession, getUser, hashPassword, Limiter, newTotpSecret,
   sha256, STEPUP_MS, verifyPassword, verifyTotp, type SessionRow, type TokenRow,
 } from "./auth";
+import type { AtollService } from "./atoll";
 import type { BackupService } from "./backup";
 import type { KomariService } from "./komari";
 import type { RatesService } from "./rates";
@@ -21,9 +22,9 @@ import { HttpError, toPublic, type CommitResult, type Store } from "./store";
 type Env = { Variables: { actor: Actor; session?: SessionRow } };
 const COOKIE = "fc_session";
 
-export interface AppDeps { store: Store; komari: KomariService; backup: BackupService; rates?: RatesService; webDir?: string; secureCookie?: boolean }
+export interface AppDeps { store: Store; komari: KomariService; backup: BackupService; rates?: RatesService; atoll?: AtollService; webDir?: string; secureCookie?: boolean }
 
-export function createApp({ store, komari, backup, rates, webDir, secureCookie }: AppDeps) {
+export function createApp({ store, komari, backup, rates, atoll, webDir, secureCookie }: AppDeps) {
   const app = new Hono<Env>();
   const loginLimit = new Limiter(10, 15 * 60_000);
   const db = store.db;
@@ -335,6 +336,9 @@ export function createApp({ store, komari, backup, rates, webDir, secureCookie }
     next.backup.keep = Math.min(365, Math.max(1, Math.floor(next.backup.keep)));
     next.backup.hour = Math.min(23, Math.max(0, Math.floor(next.backup.hour)));
     next.komari.intervalMin = Math.min(1440, Math.max(5, Math.floor(next.komari.intervalMin)));
+    next.atoll.intervalMin = [5, 15, 30, 60].includes(Number(next.atoll.intervalMin)) ? Number(next.atoll.intervalMin) : 15;
+    next.atoll.enabled = Boolean(next.atoll.enabled);
+    next.atoll.url = String(next.atoll.url ?? "").trim().slice(0, 300);
     // the server owns the fetched-at stamp; a client can't fake it
     next.display.ratesUpdatedAt = cur.display.ratesUpdatedAt;
     next.display.ratesSource = cur.display.ratesSource;
@@ -342,6 +346,7 @@ export function createApp({ store, komari, backup, rates, webDir, secureCookie }
     store.saveSettings(next);
     if (next.display.autoRates && (!cur.display.autoRates || cur.display.currency !== next.display.currency)) await rates?.refresh();
     if (cur.komari.url !== next.komari.url || cur.komari.intervalMin !== next.komari.intervalMin) { komari.resetCache(); komari.start(); }
+    if (JSON.stringify(cur.atoll) !== JSON.stringify(next.atoll)) atoll?.start();
     return c.json({ settings: store.settings() });
   });
   app.post("/api/settings/rates/refresh", async (c) => {
@@ -399,6 +404,33 @@ export function createApp({ store, komari, backup, rates, webDir, secureCookie }
     const before = store.resolve(assetId);
     if (!before.komari) throw new HttpError(400, "没有绑定节点");
     return respond(c, store.commit(a, [{ op: "put", id: before.id, before, after: { ...before, komari: null } }], `解除 Komari 绑定「${before.name}」`, "update"));
+  });
+
+  // ---------- Atoll (read-only snapshot; links to assets are derived in the client, never stored) ----------
+  const needAtoll = () => { if (!atoll) throw new HttpError(503, "Atoll 接入未启用"); return atoll; };
+  app.get("/api/atoll/info", (c) => {
+    need(c, "read");
+    const s = store.settings().atoll;
+    const snap = atoll?.snapshot() ?? null;
+    return c.json({
+      enabled: s.enabled, url: s.url, hasKey: atoll?.hasKey ?? false,
+      lastSync: atoll?.lastSync() ?? null, lastError: atoll?.state.lastError ?? null,
+      projects: snap ? snap.projects.length : null, servers: snap ? snap.servers.length : null,
+      key: atoll?.state.key ?? null,
+    });
+  });
+  app.get("/api/atoll/snapshot", (c) => {
+    need(c, "read");
+    if (!store.settings().atoll.enabled) return c.json({ snapshot: null });
+    return c.json({ snapshot: atoll?.snapshot() ?? null });
+  });
+  app.post("/api/atoll/sync", async (c) => {
+    need(c, "write");
+    if (actor(c).kind === "token" && decide(actor(c), "write") !== "direct") throw new HttpError(403, "同步需要完全权限令牌");
+    const svc = needAtoll();
+    if (!store.settings().atoll.enabled) throw new HttpError(400, "Atoll 接入已关闭");
+    const snap = await svc.sync();
+    return c.json({ servers: snap.servers.length, projects: snap.projects.length, syncedAt: snap.syncedAt, key: svc.state.key ?? null });
   });
 
   // ---------- tokens (web only) ----------

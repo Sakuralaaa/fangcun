@@ -20,6 +20,7 @@
 - **号码**：号码、运营商 / 平台、国家、用途、保号 / 续费到期、月租。
 - **关联、标签、备注、附件**：文档类资产可以上传合同、发票等附件，随完整备份一起导出。
 - **服务器页**：在线数、实时带宽、本月流量、每月成本，以及每台机器的 CPU / 内存 / 硬盘 / 流量 / 负载卡片（数据来自 Komari，由方寸服务端转发）。
+- **Atoll 只读接入**：读取 Atoll 面板的项目 / 服务 / 域名，VPS 详情里看到「这台机器上跑着哪些项目」，域名详情里看到「哪些服务指向这个域名」，快到期时提示「影响 N 个 Atoll 项目」。
 
 方寸只是台账：**不做 SSH、终端、SFTP，不采集监控，不对任何服务器做任何操作。**
 
@@ -37,7 +38,7 @@
 
 - 端口：容器 `8080`
 - 数据卷：容器 `/data`（数据库、附件、自动备份都在这里，务必挂载）
-- 环境变量（可选）：`KOMARI_API_KEY`（Komari 管理员 API Key，只读使用）、`TZ=Asia/Shanghai`、`COOKIE_SECURE=1`（走 HTTPS 反代时）
+- 环境变量（可选）：`KOMARI_API_KEY`（Komari 管理员 API Key，只读使用）、`ATOLL_API_KEY`（Atoll 只读令牌，见下文「Atoll 接入」）、`TZ=Asia/Shanghai`、`COOKIE_SECURE=1`（走 HTTPS 反代时）
 
 或用 compose：
 
@@ -45,6 +46,7 @@
 mkdir fangcun && cd fangcun
 curl -fsSLO https://raw.githubusercontent.com/Sakuralaaa/fangcun/main/docker-compose.yml
 echo "KOMARI_API_KEY=你的 Komari API Key" > .env   # 可选
+echo "ATOLL_API_KEY=atl_pat_你的只读令牌" >> .env    # 可选
 docker compose up -d
 ```
 
@@ -81,6 +83,7 @@ FANGCUN_DATA_DIR=./data KOMARI_API_KEY=xxx npm start   # http://localhost:8080
 | `FANGCUN_DATA_DIR` | `./data`（镜像里 `/data`） | 数据库、附件、备份 |
 | `FANGCUN_BACKUP_DIR` | `$FANGCUN_DATA_DIR/backups` | 自动备份目录 |
 | `KOMARI_API_KEY` | — | Komari 管理员 API Key，只放在服务端，不进数据库、不进备份 |
+| `ATOLL_API_KEY` | — | Atoll 的**只读（read）**API 令牌（`atl_pat_…`），只放在服务端，不进数据库、不进备份、不发给浏览器 |
 | `COOKIE_SECURE` | 自动 | `1` 强制 Secure cookie，`0` 关闭 |
 | `TZ` | 系统 | 每日自动备份按此时区判断日期 |
 
@@ -178,16 +181,38 @@ fangcun restore fangcun.fangcun --dry-run # 预览差异；--mode merge | replac
 - **自动备份**：每天一次写到服务端备份目录，默认保留最近 30 份；失败会在总览顶部提示。
 - **两步验证保护**：绑定 TOTP 后，网页端下载备份、导出、恢复、调整自动备份设置前需要再输一次动态码（10 分钟内有效）。CLI 备份 / 恢复需要完全权限令牌。
 
+## Atoll 接入（只读）
+
+Atoll 是自托管的多 VPS 容器面板。方寸只读取它的服务器、项目、服务和域名，和台账里的 VPS、域名对上号。
+
+**部署步骤：**
+
+1. 在 Atoll 面板左侧点「连接」→「API 令牌」→「创建令牌」，权限预设选 **「只读」**（只勾 read，默认的「部署」不要用），项目范围选「所有项目」，创建后复制只显示一次的 `atl_pat_…`。
+2. 把它设为方寸服务端的环境变量 `ATOLL_API_KEY`（compose 里取消注释那一行，写进 `.env`），重启容器。
+3. 在方寸「设置 → Atoll 面板」填写面板地址（如 `https://atoll.example.com`），选同步间隔（5 / 15 / 30 分钟或每小时），点「立即同步」。
+
+**安全约束：**
+
+- 服务端的 Atoll 客户端**只能发 GET**，路径白名单仅 `/api/v1/auth/me`、`/servers`、`/projects`、`/projects/{id}`、`/domains`；其他方法、路径、查询串在发出前就被代码拒绝（有单测覆盖）。不调用 exec、变量明文、日志、事件流或任何写接口。
+- 每次同步先请求 `GET /auth/me` 读出令牌权限；**权限里有 read 以外的任何一项（deploy、exec…）就拒绝使用**，设置页提示「这个 key 不是只读」。读不到时（较旧的 Atoll）照常同步，并提醒你自己确认是只读令牌。
+- 只保存一份精简快照（服务器名 / 状态 / 公网 IP、项目、服务名 / 镜像 / 状态、域名），环境变量、端口、卷等字段一到就丢弃。
+
+**怎么对上号：**
+
+- **VPS ↔ Atoll 服务器**：Atoll 上报的公网 IPv4 / IPv6 等于资产「详细信息」里任一 IP 行（标签含 IP 的行，如 IPv4、IPv6、公网 IP；含 Komari 同步来的 IP；IPv6 按规范形式比较）。一个 IP 同时对上多项时不自动关联。对不上可以在 VPS 详情的「Atoll 上的项目」卡片右上角手动选（或设为「不关联」），**手动优先**，存在资产的 `atoll.serverId` 上。
+- **服务域名 ↔ 域名资产**：按后缀匹配，取最长的那个：`blog.example.com` → 域名资产 `example.com`；同时有 `shop.example.com` 资产时 `api.shop.example.com` 归它。
+- 关联是即时算出来的视图，**不写进资产的「关联」，也不改任何手填数据**。
+
 ## 项目结构
 
 ```
-packages/core   类型与 schema 版本、到期 / 紧急度 / 费用计算、Komari 字段映射、备份格式、CSV / ICS、doctor、权限判定
-apps/server     Node 22 + Hono + node:sqlite；迁移、登录 / 会话 / TOTP、令牌、变更计划、审计与撤销、Komari 只读转发、备份
+packages/core   类型与 schema 版本、到期 / 紧急度 / 费用计算、Komari 字段映射、Atoll 关联（IP / 域名后缀匹配）、备份格式、CSV / ICS、doctor、权限判定
+apps/server     Node 22 + Hono + node:sqlite；迁移、登录 / 会话 / TOTP、令牌、变更计划、审计与撤销、Komari 只读转发、Atoll 只读快照、备份
 apps/web        React 19 + Vite + Tailwind v4 + lucide；?demo=1 为演示模式
 apps/cli        fangcun 命令与 stdio MCP server（esbuild 打成单文件）
 ```
 
-测试（vitest）覆盖：到期与费用计算、支付卡 / 号码校验、Komari 映射与手改保护（伪造的 1.2.5 响应）、备份往返与篡改检测、schema 迁移、令牌三档权限与审批流程、撤销与回收站、2FA 二次验证、MCP 协议。
+测试（vitest）覆盖：到期与费用计算、支付卡 / 号码校验、Komari 映射与手改保护（伪造的 1.2.5 响应）、Atoll 只读白名单与非只读令牌拒绝、IP / 域名后缀匹配与手动绑定优先、备份往返与篡改检测、schema 迁移、令牌三档权限与审批流程、撤销与回收站、2FA 二次验证、MCP 协议。
 
 ## 路线图
 

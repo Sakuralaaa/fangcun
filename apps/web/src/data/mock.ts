@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type NodeStatus, type Settings } from "@fangcun/core";
+import { DEFAULT_SETTINGS, type AtollSnapshot, type NodeStatus, type Settings } from "@fangcun/core";
 import type { Asset, StatusMap } from "./types";
 
 /** Demo mode (?demo=1 or VITE_DEMO=1): fixed sample data, nothing leaves the browser. */
@@ -49,7 +49,7 @@ export const demoAssets: Asset[] = [
   mk({ id: "la-lab", type: "server", name: "la-lab", subtitle: "洛杉矶 · 实验机", provider: "西岸云",
     price: 36, currency: "USD", cycle: "year", expiresAt: "2027-03-14", autoRenew: false, purchasedAt: "2026-03-14", tags: ["个人"],
     details: [{ label: "IPv4", value: "203.0.113.42", mono: true }, { label: "地区", value: "洛杉矶" }, { label: "CPU", value: "1 核" }, { label: "内存", value: "1 GB" }, { label: "硬盘", value: "20 GB" }, { label: "系统", value: "Alpine 3.20" }],
-    komari: kom("9b2e-lalab") }),
+    komari: kom("9b2e-lalab"), atoll: { serverId: "srv_lalab" } }),
   mk({ id: "api-cert", type: "cert", name: "api.starbridge.example", subtitle: "TLS 证书 · Let's Encrypt", provider: "Let's Encrypt",
     price: 0, cycle: "quarter", expiresAt: "2026-11-19", purchasedAt: "2026-08-21",
     tags: ["星桥商城"], related: ["hk-api-02", "starbridge"], note: "自动续期脚本 10 月迁机后没恢复，要手动续。",
@@ -128,5 +128,49 @@ export const demoStatus: StatusMap = {
   "9b2e-lalab": st({ uuid: "9b2e-lalab", online: false }),
 };
 
-export const demoSettings: Settings = { ...DEFAULT_SETTINGS, komari: { ...DEFAULT_SETTINGS.komari, url: "https://probe.sak.example" } };
+export const demoSettings: Settings = { ...DEFAULT_SETTINGS, komari: { ...DEFAULT_SETTINGS.komari, url: "https://probe.sak.example" }, atoll: { enabled: true, url: "https://atoll.sak.example", intervalMin: 15 } };
 export const demoKomariInfo = { url: "https://probe.sak.example", hasKey: true, version: "1.2.5 (e446bee)", lastSync: "2026-11-15T03:02:00.000Z", lastError: null, nodes: 4 };
+
+// Atoll (read-only container panel) — demo snapshot. hk-api-01/02 and sg-pg match by public IP;
+// la-lab sits behind NAT on Atoll (no public IPv4 reported) and is bound by hand; fra-edge is not in 方寸.
+const AT = "2026-11-15T03:05:00.000Z";
+const dom = (id: string, service_id: string, hostname: string, status = "active", proxied = true) => ({ id, service_id, hostname, status, proxied });
+export const demoAtollSnapshot: AtollSnapshot = {
+  syncedAt: AT,
+  servers: [
+    { id: "srv_hk01", name: "hk-api-01", status: "online", public_ipv4: "192.0.2.10", provider: "演示云", region: "香港" },
+    { id: "srv_hk02", name: "hk-api-02", status: "online", public_ipv4: "192.0.2.11", provider: "演示云", region: "香港" },
+    { id: "srv_sgpg", name: "sg-db", status: "online", public_ipv4: "198.51.100.7", provider: "海峡主机", region: "新加坡" },
+    { id: "srv_lalab", name: "lab", status: "online", public_ipv6: "2001:db8:42::1", provider: "西岸云", region: "洛杉矶" },
+    { id: "srv_fra", name: "fra-edge", status: "offline", public_ipv4: "203.0.113.80", region: "法兰克福" },
+  ],
+  projects: [
+    { id: "prj_api", name: "starbridge-api", display_name: "星桥商城 API", server_id: "srv_hk02", services: [
+      { id: "svc_api", name: "api", kind: "image", image: "ghcr.io/starbridge/api:2.14.1", status: "running", domains: [dom("d1", "svc_api", "api.starbridge.example")] },
+      { id: "svc_admin", name: "admin", kind: "image", image: "ghcr.io/starbridge/admin:2.14.1", status: "running", domains: [dom("d2", "svc_admin", "admin.starbridge.example", "active", false)] },
+      { id: "svc_worker", name: "worker", kind: "image", image: "ghcr.io/starbridge/worker:2.14.1", status: "deploying", domains: [] },
+      { id: "svc_redis", name: "redis", kind: "redis", image: "redis:7.4-alpine", status: "running", domains: [] },
+    ] },
+    { id: "prj_web", name: "starbridge-web", display_name: "星桥官网", server_id: "srv_hk01", services: [
+      { id: "svc_web", name: "web", kind: "image", image: "ghcr.io/starbridge/web:1.8.0", status: "running", domains: [dom("d3", "svc_web", "starbridge.example"), dom("d4", "svc_web", "www.starbridge.example")] },
+    ] },
+    { id: "prj_data", name: "starbridge-data", display_name: "星桥数据", server_id: "srv_sgpg", services: [
+      { id: "svc_pg", name: "postgres", kind: "postgres", image: "postgres:17.2", status: "running", domains: [] },
+      { id: "svc_metabase", name: "metabase", kind: "image", image: "metabase/metabase:v0.52", status: "running", domains: [dom("d5", "svc_metabase", "bi.starbridge.example")] },
+    ] },
+    { id: "prj_blog", name: "blog", display_name: "个人博客", server_id: "srv_lalab", services: [
+      { id: "svc_ghost", name: "ghost", kind: "image", image: "ghost:5.105-alpine", status: "running", domains: [dom("d6", "svc_ghost", "blog.sak.dev")] },
+      { id: "svc_mysql", name: "mysql", kind: "mysql", image: "mysql:8.4", status: "running", domains: [] },
+    ] },
+    { id: "prj_kuma", name: "uptime", display_name: "状态页", server_id: "srv_lalab", services: [
+      { id: "svc_kuma", name: "uptime-kuma", kind: "image", image: "louislam/uptime-kuma:1.23", status: "stopped", domains: [dom("d7", "svc_kuma", "status.sak.dev", "pending", false)] },
+    ] },
+    { id: "prj_edge", name: "edge-cache", server_id: "srv_fra", services: [
+      { id: "svc_varnish", name: "varnish", kind: "image", image: "varnish:7.6", status: "unknown", domains: [dom("d8", "svc_varnish", "cdn.example.net")] },
+    ] },
+  ],
+};
+export const demoAtollInfo = {
+  enabled: true, url: "https://atoll.sak.example", hasKey: true, lastSync: AT, lastError: null, projects: 6, servers: 5,
+  key: { readOnly: true, permissions: ["read"], projectScoped: false, checkedAt: AT },
+};

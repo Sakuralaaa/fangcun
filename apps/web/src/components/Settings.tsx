@@ -5,10 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Asset } from "../data/types";
 import { api, download, get, post } from "../lib/api";
 import { useData } from "../lib/store";
+import { AtollBadge } from "./Atoll";
 import { Button, Card, Empty, Field, KomariBadge, Select, TextInput, Toggle, TypeIcon } from "./ui";
 
 export const SETTINGS_TABS: [string, string][] = [
-  ["general", "常规"], ["security", "登录与两步验证"], ["komari", "Komari 探针"], ["tokens", "访问令牌"],
+  ["general", "常规"], ["security", "登录与两步验证"], ["komari", "Komari 探针"], ["atoll", "Atoll 面板"], ["tokens", "访问令牌"],
   ["plans", "变更审批"], ["log", "操作日志"], ["trash", "回收站"], ["backup", "备份与导出"], ["about", "关于"],
 ];
 
@@ -27,6 +28,7 @@ export function Settings({ tab = "general", onTab }: { tab?: string; onTab: (t: 
           {current === "general" && <General />}
           {current === "security" && <Security />}
           {current === "komari" && <Komari />}
+          {current === "atoll" && <AtollSettings />}
           {current === "tokens" && <Tokens />}
           {current === "plans" && <Plans />}
           {current === "log" && <Log />}
@@ -249,6 +251,79 @@ function Komari() {
             <span className={clsx("text-right text-xs", n.overridden ? "text-warn" : "text-subtle")}>{n.assetId ? (n.overridden ? `${n.overridden} 项手改` : "已同步") : "未绑定"}</span>
           </div>
         ))}
+      </Card>
+    </>
+  );
+}
+
+// ---------------- Atoll ----------------
+function AtollSettings() {
+  const { settings, saveSettings, atoll, atollSnap, atollView, reloadAtoll, assets, toast, demo } = useData();
+  const [url, setUrl] = useState(settings.atoll.url);
+  const [busy, setBusy] = useState(false);
+  const s = settings.atoll;
+  useEffect(() => setUrl(settings.atoll.url), [settings.atoll.url]);
+  const saveField = async (patch: Partial<S["atoll"]>) => {
+    try { await saveSettings({ ...settings, atoll: { ...s, ...patch } }); await reloadAtoll(); } catch (e) { toast((e as Error).message, "err"); }
+  };
+  const sync = async () => {
+    setBusy(true);
+    try {
+      const r = await post<{ servers: number; projects: number }>("/api/atoll/sync");
+      toast(`同步完成：${r.servers} 台服务器，${r.projects} 个项目`);
+    } catch (e) { toast((e as Error).message, "err"); }
+    await reloadAtoll().catch(() => {});
+    setBusy(false);
+  };
+  const key = atoll?.key;
+  const notReadOnly = key?.readOnly === false;
+  const connected = Boolean(s.enabled && atoll?.hasKey && s.url && !atoll?.lastError && atoll?.lastSync);
+  const status = !s.enabled ? <span className="text-subtle">已关闭</span>
+    : connected ? <span className="flex items-center gap-1.5 text-ok"><span className="size-1.5 rounded-full bg-ok" />已连接{key?.readOnly ? " · 只读令牌" : ""}</span>
+    : <span className="max-w-[360px] truncate text-muted" title={atoll?.lastError ?? undefined}>{atoll?.lastError || (!atoll?.hasKey ? "缺少 API Key" : !s.url ? "未填写地址" : "还没同步过")}</span>;
+  const servers = assets.filter((a) => a.type === "server");
+  const matched = servers.filter((a) => atollView.match.get(a.id)?.serverId && atollView.match.get(a.id)?.via !== "manual-missing");
+
+  return (
+    <>
+      <Title sub="只读读取 Atoll 的服务器、项目、服务和域名，和方寸里的 VPS、域名对上号。方寸不会改动 Atoll，也不会改你手填的资产数据。">Atoll 面板 <AtollBadge /></Title>
+      {demoOnly(demo)}
+      <Card title="连接" extra={status}>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="面板地址">
+            <div className="flex gap-2"><TextInput value={url} onChange={setUrl} mono placeholder="https://atoll.example.com" /><Button onClick={() => saveField({ url: url.trim() })} disabled={url === s.url}>保存</Button></div>
+          </Field>
+          <Field label="API Key">
+            <span className="flex h-9 items-center gap-2 rounded-sm border border-line bg-field px-3 text-[13px] text-subtle"><Lock size={13} />{atoll?.hasKey ? "已由环境变量 ATOLL_API_KEY 提供" : "未设置（服务端环境变量 ATOLL_API_KEY）"}</span>
+          </Field>
+        </div>
+        {notReadOnly && (
+          <p className="mt-3 rounded-sm border border-line bg-field px-3 py-2 text-[13px] text-ink">
+            这个 key 不是只读（权限：{(key?.permissions ?? []).join("、")}），方寸已拒绝使用。请在 Atoll 里另建一个只勾「只读」的令牌，替换 ATOLL_API_KEY 后重启方寸。
+          </p>
+        )}
+        {key?.readOnly === null && <p className="mt-3 text-xs text-subtle">没能从 Atoll 读到这个 key 的权限（面板版本较旧？），请自行确认它是只读（read）令牌。</p>}
+        <div className="mt-4 flex items-center gap-3 text-[13px]">
+          <span className="whitespace-nowrap text-muted">启用</span>
+          <Toggle on={s.enabled} onChange={(v) => saveField({ enabled: v })} />
+          <span className="ml-3 whitespace-nowrap text-muted">同步间隔</span>
+          <div className="w-32 shrink-0"><Select value={String(s.intervalMin)} onChange={(v) => saveField({ intervalMin: Number(v) })} options={[["5", "每 5 分钟"], ["15", "每 15 分钟"], ["30", "每 30 分钟"], ["60", "每小时"]]} /></div>
+          <span className="min-w-0 truncate text-xs text-subtle">{atoll?.lastSync ? `上次 ${new Date(atoll.lastSync).toLocaleString("zh-CN", { hour12: false })}` : "还没同步过"}{atoll?.projects != null ? `，${atoll.projects} 个项目` : ""}{atoll?.servers != null ? `、${atoll.servers} 台服务器` : ""}</span>
+          <div className="flex-1" />
+          <Button icon={<RefreshCw size={14} className={clsx(busy && "animate-spin")} />} onClick={sync} disabled={demo || busy || !s.url || !s.enabled}>立即同步</Button>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-subtle">
+          API Key 只从服务端环境变量读取，不存数据库、不发给浏览器。在 Atoll 面板左侧「连接」→「API 令牌」→「创建令牌」，权限选「只读」（read）。
+          方寸只会请求 GET /auth/me、/servers、/projects、/projects/&#123;id&#125;、/domains，代码里拒绝任何其他请求，不会执行命令、查看变量或日志。
+        </p>
+      </Card>
+
+      <Card title="怎么对上号" extra={atollSnap ? `${matched.length}/${servers.length} 台 VPS 已关联` : undefined}>
+        <ul className="space-y-1.5 text-[13px] leading-relaxed text-muted">
+          <li><b className="font-semibold text-ink">VPS ↔ Atoll 服务器</b>：Atoll 上报的公网 IPv4 / IPv6 等于资产「详细信息」里任一 IP（IPv4、IPv6、公网 IP 等，含 Komari 同步来的）。对不上时在 VPS 详情的「Atoll 上的项目」里手动选，手动优先。</li>
+          <li><b className="font-semibold text-ink">服务域名 ↔ 域名资产</b>：按后缀匹配，取最长的那个（blog.example.com → example.com）。</li>
+          <li>关联只是即时算出来的视图，不写进资产的「关联」，也不改任何手填数据。</li>
+        </ul>
       </Card>
     </>
   );
@@ -543,7 +618,7 @@ function About() {
     <>
       <Title>关于方寸</Title>
       <Card>
-        <p className="text-[13px] leading-relaxed text-muted">方寸是个人资产台账：服务器、域名、证书、订阅、邮箱、号码、支付卡、账号和文档的到期与费用，一处管理。只读接入 Komari 探针，不做任何远程操作。</p>
+        <p className="text-[13px] leading-relaxed text-muted">方寸是个人资产台账：服务器、域名、证书、订阅、邮箱、号码、支付卡、账号和文档的到期与费用，一处管理。只读接入 Komari 探针和 Atoll 面板，不做任何远程操作。</p>
         <div className="mt-3 text-xs text-subtle">版本 {h?.version ?? "0.1.0"} · MIT License</div>
         <div className="mt-3 text-xs text-subtle">路线图：v0.2 端到端加密密码保险库 · 桌面版 · 手机 App · AI 额度插件</div>
       </Card>

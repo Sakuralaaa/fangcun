@@ -1,0 +1,140 @@
+import { atollImpact, type AtollMatch, type AtollServer } from "@fangcun/core";
+import clsx from "clsx";
+import type { Asset } from "../data/types";
+import { useData } from "../lib/store";
+import { Card, Empty } from "./ui";
+
+export function AtollBadge({ className }: { className?: string }) {
+  return <span className={clsx("inline-flex h-[18px] items-center rounded-[5px] bg-accent-soft px-1.5 text-[10.5px] font-semibold text-accent", className)}>Atoll</span>;
+}
+
+const STATUS: Record<string, { label: string; dot: string }> = {
+  running: { label: "运行中", dot: "bg-ok" },
+  deploying: { label: "部署中", dot: "bg-accent animate-pulse" },
+  stopped: { label: "已停止", dot: "bg-subtle" },
+  failed: { label: "失败", dot: "border-[1.5px] border-ink bg-transparent" },
+  unknown: { label: "未知", dot: "bg-line" },
+};
+const DOMAIN_STATUS: Record<string, string> = { active: "已生效", pending: "等待解析", provisioning: "配置中", error: "出错" };
+export const statusOf = (s: string) => STATUS[s] ?? STATUS.unknown;
+
+export function StatusDot({ status, className }: { status: string; className?: string }) {
+  const m = statusOf(status);
+  return <span title={m.label} className={clsx("inline-block size-2 shrink-0 rounded-full", m.dot, className)} />;
+}
+
+/** Atoll is on (enabled) and either configured or has a snapshot to show. */
+export function useAtollOn() {
+  const { settings, atollSnap } = useData();
+  return settings.atoll.enabled && Boolean(atollSnap || settings.atoll.url);
+}
+
+/** "影响 N 个 Atoll 项目" next to an expiry warning. */
+export function AtollImpact({ asset }: { asset: Asset }) {
+  const { atollView } = useData();
+  const on = useAtollOn();
+  const n = on ? atollImpact(atollView, asset) : 0;
+  if (!n) return null;
+  return <span className="text-xs whitespace-nowrap text-muted" title={asset.type === "server" ? "这台机器上运行的 Atoll 项目" : "有服务绑定了这个域名（或其子域名）的 Atoll 项目"}>影响 {n} 个 Atoll 项目</span>;
+}
+
+const srvLabel = (s: AtollServer) => [s.name, s.public_ipv4 || s.public_ipv6].filter(Boolean).join(" · ");
+
+function matchText(m: AtollMatch | undefined, servers: AtollServer[]): string {
+  const name = (id: string | null) => servers.find((s) => s.id === id)?.name ?? id ?? "";
+  switch (m?.via) {
+    case "ip": return `按 IP ${m.ip} 匹配 · ${name(m.serverId)}`;
+    case "manual": return `手动绑定 · ${name(m.serverId)}`;
+    case "manual-none": return "已设为不关联";
+    case "manual-missing": return "手动绑定的服务器已不在 Atoll";
+    case "ambiguous": return "IP 有歧义";
+    default: return "未匹配";
+  }
+}
+
+/** VPS detail: projects → services → domains running on the Atoll server this VPS matches. */
+export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect: (id: string) => void }) {
+  const { atollView, update, toast } = useData();
+  const on = useAtollOn();
+  if (!on) return null;
+  const servers = atollView.servers;
+  const m = atollView.match.get(asset.id);
+  const projects = atollView.projectsByAsset.get(asset.id) ?? [];
+  const value = asset.atoll ? (asset.atoll.serverId ?? "__none") : "__auto";
+  const bind = async (v: string) => {
+    try { await update(asset.id, { atoll: v === "__auto" ? null : { serverId: v === "__none" ? null : v } }); }
+    catch (e) { toast((e as Error).message, "err"); }
+  };
+  const empty = !m?.serverId || m.via === "manual-missing";
+  return (
+    <Card title="Atoll 上的项目" flush scroll className="max-h-[380px]"
+      extra={<>
+        <AtollBadge />
+        <span className="max-w-[260px] truncate" title={matchText(m, servers)}>{matchText(m, servers)}</span>
+        <select value={value} onChange={(e) => bind(e.target.value)} title="选择这台 VPS 对应的 Atoll 服务器"
+          className="h-7 max-w-[170px] rounded-[6px] border border-line bg-field px-2 text-xs text-ink outline-none focus:border-ink/40">
+          {[["__auto", "自动（按 IP）"], ["__none", "不关联"], ...servers.map((s) => [s.id, srvLabel(s)])].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </>}>
+      {empty ? (
+        <Empty>{
+          m?.via === "manual-none" ? "已设为不关联 Atoll。改回「自动（按 IP）」即可重新匹配。"
+          : m?.via === "manual-missing" ? `手动绑定的 Atoll 服务器（${m.serverId}）已不在 Atoll 里，请重新选择。`
+          : m?.via === "ambiguous" ? "同一个 IP 对应了多台机器，没有自动关联。请在右上角手动选择 Atoll 服务器。"
+          : servers.length ? "没有按公网 IP 匹配到 Atoll 服务器。如果这台机器在 Atoll 里，可以在右上角手动选择。"
+          : "还没有 Atoll 数据。到「设置 → Atoll 面板」立即同步一次。"
+        }</Empty>
+      ) : !projects.length ? <Empty>这台机器上还没有 Atoll 项目。</Empty> : projects.map((p) => (
+        <div key={p.id} className="border-b border-line last:border-0">
+          <div className="flex h-10 items-center gap-2 px-4 text-[13px]">
+            <span className="truncate font-semibold">{p.name}</span>
+            {p.handle !== p.name && <span className="truncate font-mono text-[11.5px] text-subtle">{p.handle}</span>}
+            <span className="ml-auto shrink-0 text-xs text-subtle">{p.services.length} 个服务</span>
+          </div>
+          {p.services.map((s) => (
+            <div key={s.id} className="grid min-h-9 grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.4fr)] items-center gap-3 py-1.5 pr-4 pl-7 text-[13px]">
+              <span className="flex min-w-0 items-center gap-2">
+                <StatusDot status={s.status} />
+                <span className="truncate">{s.name}</span>
+                {s.status !== "running" && <span className="shrink-0 text-[11.5px] text-subtle">{statusOf(s.status).label}</span>}
+              </span>
+              <span className="truncate font-mono text-[11.5px] text-subtle" title={s.image}>{s.image || "—"}</span>
+              <span className="flex min-w-0 flex-wrap justify-end gap-1">
+                {s.domains.length ? s.domains.map((d) => (
+                  <button key={d.hostname} disabled={!d.domainAssetId} onClick={() => d.domainAssetId && onSelect(d.domainAssetId)}
+                    title={`${d.hostname} · ${DOMAIN_STATUS[d.status] ?? d.status}${d.proxied ? " · Cloudflare 代理" : ""}${d.domainAssetId ? " · 点击打开域名资产" : ""}`}
+                    className={clsx("max-w-full truncate rounded-[5px] bg-field px-1.5 py-px font-mono text-[11.5px]", d.domainAssetId ? "text-ink hover:bg-sel hover:underline" : "cursor-default text-muted", d.status !== "active" && "opacity-60")}>
+                    {d.hostname}
+                  </button>
+                )) : <span className="text-xs text-subtle">无域名</span>}
+              </span>
+            </div>
+          ))}
+          <div className="h-1.5" />
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+/** Domain detail: Atoll services whose hostname is this domain or a subdomain of it. */
+export function AtollDomainCard({ asset, onSelect }: { asset: Asset; onSelect: (id: string) => void }) {
+  const { atollView } = useData();
+  const on = useAtollOn();
+  if (!on) return null;
+  const hosts = atollView.hostsByDomain.get(asset.id) ?? [];
+  return (
+    <Card title="指向这个域名的服务" extra={<><AtollBadge />{hosts.length ? `${hosts.length} 个主机名` : null}</>} flush scroll className="max-h-[320px]">
+      {hosts.length ? hosts.map((h) => (
+        <div key={h.hostname + h.serviceId} className="grid h-11 shrink-0 grid-cols-[minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_70px] items-center gap-3 border-b border-line px-4 text-[13px] last:border-0">
+          <span className="truncate font-mono text-[12.5px]" title={h.hostname}>{h.hostname}</span>
+          <span className="flex min-w-0 items-center gap-2"><StatusDot status={h.serviceStatus} /><span className="truncate">{h.projectName}<span className="text-subtle"> / {h.serviceName}</span></span></span>
+          {h.serverAssetId
+            ? <button onClick={() => onSelect(h.serverAssetId!)} className="truncate text-left font-mono text-[12px] text-muted hover:text-ink hover:underline">{h.serverName}</button>
+            : <span className="truncate font-mono text-[12px] text-subtle" title="这台 Atoll 服务器没有对应的方寸资产">{h.serverName}</span>}
+          <span className="text-right text-xs text-subtle">{DOMAIN_STATUS[h.status] ?? h.status}</span>
+        </div>
+      )) : <Empty>Atoll 里没有服务绑定到这个域名或它的子域名。</Empty>}
+    </Card>
+  );
+}
