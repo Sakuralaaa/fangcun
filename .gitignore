@@ -3,7 +3,7 @@ dist/
 *.tsbuildinfo
 .env
 .env.*
-data/
+/data/
 *.fangcun
 *.db
 *.db-wal
