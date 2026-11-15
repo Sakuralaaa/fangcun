@@ -1,7 +1,7 @@
 import { compareAssets, displayTotal, monthlyByCurrency, money, searchAssets, ASSET_TYPES } from "@fangcun/core";
 import clsx from "clsx";
-import { Plus, Search } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Plus, Search, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Asset, AssetType } from "../data/types";
 import { dueLabel, remindDays, getToday, urgency } from "../lib/fmt";
 import { useData } from "../lib/store";
@@ -15,6 +15,8 @@ export const matchFilter = (a: Asset, f: ListFilter) => f === "all" || (f === "s
 export function AssetList({ selected, filter, onSelect, onFilter, onAdd, className }: { selected?: string; filter: ListFilter; onSelect: (id: string) => void; onFilter: (t: ListFilter) => void; onAdd: () => void; className?: string }) {
   const { assets, status, settings, setFocus } = useData();
   const [q, setQ] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const on = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); input.current?.focus(); } };
@@ -22,7 +24,18 @@ export function AssetList({ selected, filter, onSelect, onFilter, onAdd, classNa
     return () => removeEventListener("keydown", on);
   }, []);
   const today = getToday();
-  const list = searchAssets(assets.filter((a) => matchFilter(a, filter)), q).sort((a, b) => compareAssets(a, b, today));
+  const inType = assets.filter((a) => matchFilter(a, filter));
+  // tags present in the current type filter, most used first; selected ones always shown
+  const tagCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of inType) for (const t of a.tags) m.set(t, (m.get(t) ?? 0) + 1);
+    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh"));
+  }, [inType]);
+  const active = tags.filter((t) => tagCounts.some(([x]) => x === t));
+  const TAG_LIMIT = 10;
+  const shownTags = allTags ? tagCounts : tagCounts.filter(([t], i) => i < TAG_LIMIT || active.includes(t));
+  const toggleTag = (t: string) => setTags((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]));
+  const list = searchAssets(inType.filter((a) => active.every((t) => a.tags.includes(t))), q).sort((a, b) => compareAssets(a, b, today));
   const pinned = list.filter((a) => a.pinned);
   const soon = list.filter((a) => !a.pinned && remindDays(a) <= 30);
   const rest = list.filter((a) => !a.pinned && remindDays(a) > 30);
@@ -51,6 +64,19 @@ export function AssetList({ selected, filter, onSelect, onFilter, onAdd, classNa
             <Chip key={t} on={filter === t} onClick={() => onFilter(t)}>{typeMeta[t].label}<Count n={counts[t]} on={filter === t} /></Chip>
           ))}
         </div>
+        {tagCounts.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line pt-2">
+            {shownTags.map(([t, n]) => (
+              <TagChip key={t} on={active.includes(t)} onClick={() => toggleTag(t)}>#{t}<Count n={n} on={active.includes(t)} /></TagChip>
+            ))}
+            {tagCounts.length > TAG_LIMIT && (
+              <button onClick={() => setAllTags((v) => !v)} className="h-[24px] px-1.5 text-xs text-muted hover:text-ink">{allTags ? "收起" : `更多 ${tagCounts.length - shownTags.length}`}</button>
+            )}
+            {active.length > 0 && (
+              <button onClick={() => setTags([])} className="inline-flex h-[24px] items-center gap-0.5 px-1.5 text-xs text-muted hover:text-ink"><X size={12} />清除</button>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto pb-4">
         {!list.length && <p className="px-4 pt-6 text-center text-[13px] text-subtle">{filter === "starred" && !q ? "还没有关注的资产。把鼠标移到资产上，点右侧的星标即可关注。" : assets.length ? "没有匹配的资产" : "还没有资产，点右上角 + 添加第一项"}</p>}
@@ -69,6 +95,13 @@ function Chip({ on, children, onClick }: { on?: boolean; children: React.ReactNo
   return (
     <button onClick={onClick} aria-current={on ? "true" : undefined} className={clsx("inline-flex h-[26px] shrink-0 items-center gap-1 rounded-full border px-2.5 text-xs whitespace-nowrap transition-colors",
       on ? "border-ink bg-ink font-medium text-bg" : "border-line text-muted hover:bg-field")}>{children}</button>
+  );
+}
+
+function TagChip({ on, children, onClick }: { on?: boolean; children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button onClick={onClick} aria-pressed={on} className={clsx("inline-flex h-[24px] shrink-0 items-center gap-1 rounded-[6px] px-2 text-xs whitespace-nowrap transition-colors",
+      on ? "bg-ink font-medium text-bg" : "bg-field text-muted hover:text-ink")}>{children}</button>
   );
 }
 
@@ -97,7 +130,7 @@ function Row({ a, on, onClick, online, onStar }: { a: Asset; on: boolean; onClic
             {a.komari && <span className={clsx("size-1.5 shrink-0 rounded-full", online ? "bg-ok" : "bg-subtle")} />}
             {a.pinned && <Pin size={11} strokeWidth={2} className="shrink-0 text-muted" aria-label="置顶" />}
           </div>
-          <div className="truncate text-xs text-subtle">{a.subtitle || (card ? `${card.network ?? ""} ···· ${card.last4}` : a.provider)}</div>
+          <div className="truncate text-xs text-subtle">{[a.subtitle || (card ? `${card.network ?? ""} ···· ${card.last4}` : a.provider), a.tags.map((t) => `#${t}`).join(" ")].filter(Boolean).join(" · ")}</div>
         </div>
         <div className="shrink-0 text-right">
           <div className={clsx("text-[12.5px] whitespace-nowrap tnum", u === "crit" || u === "warn" ? "font-semibold" : "", urgencyText[u])}>{card?.status === "frozen" ? "冻结" : dueLabel(a)}</div>

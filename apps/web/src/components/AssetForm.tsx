@@ -118,10 +118,11 @@ export function AssetForm({ asset, initialType, onClose, onSaved }: { asset?: As
       </Section>
 
       <Section title="标签与关联">
-        <Field label="标签" hint="逗号分隔"><TextInput value={(d.tags ?? []).join(", ")} onChange={(v) => set("tags", v.split(/[,，]/).map((s) => s.trim()).filter(Boolean))} /></Field>
-        {t !== "account" ? (
+        <TagInput className="col-span-2" value={d.tags ?? []} onChange={(v) => set("tags", v)} assets={assets} type={t} selfId={asset?.id} />
+        {t !== "account" && (
           <Field label="登录账号"><Select value={d.accountId ?? ""} onChange={(v) => set("accountId", v || null)} options={[["", "不关联"], ...accounts.map((a) => [a.id, `${a.name}${a.account?.username ? ` · ${a.account.username}` : ""}`] as [string, string])]} /></Field>
-        ) : <div />}
+        )}
+        {t !== "account" && <div />}
         <div className="col-span-2"><RelatedPicker value={d.related ?? []} self={asset?.id} onChange={(v) => set("related", v)} hint={t === "payment" ? "关联用这张卡付款的订阅、服务器…" : "关联的域名、证书、付款卡…"} /></div>
         <Field label="备注" className="col-span-2"><TextArea value={d.note} onChange={(v) => set("note", v)} /></Field>
       </Section>
@@ -259,5 +260,51 @@ function RelatedPicker({ value, onChange, self, hint }: { value: string[]; onCha
         </div>
       )}
     </Field>
+  );
+}
+
+/** 标签：已加的显示成可删的小块；回车或逗号添加；下方列出别的资产用过的标签（同类型优先），点一下就加上。 */
+function TagInput({ value, onChange, assets, type, selfId, className }: { value: string[]; onChange: (v: string[]) => void; assets: Asset[]; type: AssetType; selfId?: string; className?: string }) {
+  const [text, setText] = useState("");
+  const add = (raw: string) => {
+    const next = raw.split(/[,，]/).map((s) => s.trim().replace(/^#/, "")).filter(Boolean);
+    if (next.length) onChange([...new Set([...value, ...next])]);
+    setText("");
+  };
+  const suggestions = useMemo(() => {
+    const score = new Map<string, number>();
+    for (const a of assets) if (a.id !== selfId) for (const tag of a.tags) score.set(tag, (score.get(tag) ?? 0) + (a.type === type ? 100 : 1));
+    const q = text.trim().replace(/^#/, "").toLowerCase();
+    return [...score].filter(([tag]) => !value.includes(tag) && (!q || tag.toLowerCase().includes(q)))
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh")).slice(0, 12).map(([tag]) => tag);
+  }, [assets, selfId, type, value, text]);
+  return (
+    <div className={clsx("flex min-w-0 flex-col gap-1.5", className)}>
+      <span className="text-xs text-muted">标签</span>
+      <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-sm border border-line bg-field px-2 py-1 focus-within:border-ink/40">
+        {value.map((tag) => (
+          <span key={tag} className="inline-flex h-6 items-center gap-1 rounded-[5px] bg-panel pr-1 pl-2 text-xs">
+            {tag}
+            <button type="button" onClick={() => onChange(value.filter((x) => x !== tag))} aria-label={`去掉标签 ${tag}`} className="grid size-4 place-items-center rounded-[3px] text-muted hover:bg-field hover:text-ink"><X size={11} /></button>
+          </span>
+        ))}
+        <input value={text} onChange={(e) => (/[,，]$/.test(e.target.value) ? add(e.target.value) : setText(e.target.value))}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === "Enter") { e.preventDefault(); add(text); }
+            else if (e.key === "Backspace" && !text && value.length) onChange(value.slice(0, -1));
+          }}
+          onBlur={() => text.trim() && add(text)}
+          placeholder={value.length ? "" : "如 香港、甲骨文、Google 账号"} className="h-6 min-w-24 flex-1 bg-transparent text-[13px] outline-none placeholder:text-subtle" />
+      </div>
+      {suggestions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {suggestions.map((tag) => (
+            <button key={tag} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => add(tag)}
+              className="inline-flex h-6 items-center gap-0.5 rounded-full border border-line px-2 text-xs text-muted hover:bg-field hover:text-ink"><Plus size={11} />{tag}</button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

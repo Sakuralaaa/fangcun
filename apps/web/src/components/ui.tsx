@@ -109,7 +109,7 @@ export function Modal({ title, onClose, children, footer, width = 520 }: { title
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="flex max-h-[calc(100vh-48px)] w-full flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-xl" style={{ maxWidth: width }}>
+      <div role="dialog" aria-modal="true" className="flex max-h-[calc(100vh-48px)] w-full flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-xl" style={{ maxWidth: width }}>
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-line px-5">
           <h2 className="text-[15px] font-semibold">{title}</h2>
           <button onClick={onClose} className="grid size-7 place-items-center rounded-[7px] text-subtle hover:bg-field hover:text-ink"><X size={16} /></button>
