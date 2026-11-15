@@ -1,0 +1,110 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource/jetbrains-mono/400.css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: "Inter Variable", "PingFang SC", "Microsoft YaHei UI", "Noto Sans CJK SC",
+    "WenQuanYi Zen Hei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-bg: #fbfaf8;
+  --color-rail: #f3f1ed;
+  --color-panel: #ffffff;
+  --color-field: #f1efea;
+  --color-ink: #1a1d24;
+  --color-muted: #5d6370;
+  --color-subtle: #959aa5;
+  --color-line: #e9e6e0;
+  --color-sel: #f1efea;
+  --color-accent: #1a1d24;
+  --color-accent-soft: #edebe6;
+  --color-on-accent: #ffffff;
+  --color-spark: #ff7a45;
+  --color-spark-soft: #fff0e8;
+  --color-crit: #d6303a;
+  --color-crit-soft: #fde8e9;
+  --color-warn: #b8650a;
+  --color-warn-soft: #fff3e2;
+  --color-ok: #1d8a5a;
+  --color-ok-soft: #e2f5ec;
+
+  --color-t-server: #3d5bd9;
+  --color-t-server-soft: #e7ecfd;
+  --color-t-domain: #0e8a7d;
+  --color-t-domain-soft: #dff5f1;
+  --color-t-cert: #2f7d32;
+  --color-t-cert-soft: #e4f3e4;
+  --color-t-sub: #55657a;
+  --color-t-sub-soft: #e9edf2;
+  --color-t-mail: #c2416b;
+  --color-t-mail-soft: #fce7ef;
+  --color-t-phone: #6d6a2a;
+  --color-t-phone-soft: #f2f1dc;
+  --color-t-account: #b5600f;
+  --color-t-account-soft: #fcefdf;
+  --color-t-payment: #3e6670;
+  --color-t-payment-soft: #e3edef;
+  --color-t-document: #5f5a52;
+  --color-t-document-soft: #eeece8;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+}
+
+[data-theme="dark"] {
+  --color-bg: #0f1014;
+  --color-rail: #0b0c0f;
+  --color-panel: #16181e;
+  --color-field: #1e2128;
+  --color-ink: #eceef3;
+  --color-muted: #a3a8b4;
+  --color-subtle: #6c7280;
+  --color-line: #25282f;
+  --color-sel: #1e2128;
+  --color-accent: #eceef3;
+  --color-accent-soft: #23262d;
+  --color-on-accent: #0f1014;
+  --color-spark: #ff8a5c;
+  --color-spark-soft: #3a2418;
+  --color-crit: #ff6b73;
+  --color-crit-soft: #351a1e;
+  --color-warn: #ffb454;
+  --color-warn-soft: #2d2416;
+  --color-ok: #4cd69a;
+  --color-ok-soft: #13302a;
+  --color-t-server: #8ea4ff;
+  --color-t-server-soft: #1d2340;
+  --color-t-domain: #4fd6c4;
+  --color-t-domain-soft: #13302c;
+  --color-t-cert: #7fd483;
+  --color-t-cert-soft: #172d19;
+  --color-t-sub: #9fb0c4;
+  --color-t-sub-soft: #1d232b;
+  --color-t-mail: #ff8fb3;
+  --color-t-mail-soft: #361b26;
+  --color-t-phone: #dcd77a;
+  --color-t-phone-soft: #2b2a17;
+  --color-t-account: #ffb366;
+  --color-t-account-soft: #33251a;
+  --color-t-payment: #8fb9c2;
+  --color-t-payment-soft: #182629;
+  --color-t-document: #bdb6aa;
+  --color-t-document-soft: #24221f;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+.tnum { font-variant-numeric: tabular-nums; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 8px; }
+:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-ink) 14%, transparent); }
