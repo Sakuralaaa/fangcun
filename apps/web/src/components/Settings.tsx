@@ -210,13 +210,13 @@ function Komari() {
           </Field>
         </div>
         <div className="mt-4 flex items-center gap-3 text-[13px]">
-          <span className="whitespace-nowrap text-muted">自动同步</span>
-          <Select value={String(k.intervalMin)} onChange={(v) => saveField({ intervalMin: Number(v) })} className="w-36" options={[["15", "每 15 分钟"], ["30", "每 30 分钟"], ["60", "每小时"], ["360", "每 6 小时"], ["1440", "每天"]]} />
+          <span className="whitespace-nowrap text-muted" title="价格、到期、配置、IP 等台账字段，这些很少变">台账字段同步</span>
+          <Select value={String(k.intervalMin)} onChange={(v) => saveField({ intervalMin: Number(v) })} className="w-36" options={[["5", "每 5 分钟"], ["15", "每 15 分钟"], ["30", "每 30 分钟"], ["60", "每小时"], ["360", "每 6 小时"], ["1440", "每天"]]} />
           <span className="text-xs text-subtle">{komari?.lastSync ? `上次 ${new Date(komari.lastSync).toLocaleString()}` : "还没同步过"}{komari?.nodes != null ? `，${komari.nodes} 个节点` : ""}</span>
           <div className="flex-1" />
           <Button icon={<RefreshCw size={14} className={clsx(busy && "animate-spin")} />} onClick={sync} disabled={demo || busy || !k.url}>立即同步</Button>
         </div>
-        <p className="mt-3 text-xs text-subtle">运行状态：有人在看时每 10 秒刷新，平时服务端每 5 分钟缓存一次。只会请求 GET /api/admin/client/list 和 rpc2 的 common:getNodesLatestStatus。</p>
+        <p className="mt-3 text-xs text-subtle">这里只管价格、到期、配置这些台账字段。CPU、内存、流量、网速等运行状态是另外实时拉的：总览、服务器页、详情页打开时每 10 秒刷新，没人看时服务端每 5 分钟缓存一次。只会请求 GET /api/admin/client/list 和 rpc2 的 common:getNodesLatestStatus。</p>
       </Card>
 
       <Card title="以 Komari 为准的字段" extra="关掉的字段只在方寸里维护">
