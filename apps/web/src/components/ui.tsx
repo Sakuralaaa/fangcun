@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { CreditCard, FileText, Globe, KeyRound, Mail, Server, ShieldCheck, Smartphone, Sparkles, X } from "lucide-react";
+import { CreditCard, FileText, Globe, KeyRound, Mail, MoreHorizontal, Pin, Server, ShieldCheck, Smartphone, Sparkles, Star, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AssetType } from "../data/types";
 import type { Urgency } from "../lib/fmt";
@@ -66,7 +66,7 @@ export function Button({ children, variant = "default", icon, className, onClick
  * A card. The body is a size container (`@container`), so rows inside lay out by the card's own width, not the window's.
  * The header keeps the title whole: when title + extra do not fit on one line, the extra wraps under it.
  */
-export function Card({ title, extra, children, className, flush, scroll }: { title?: ReactNode; extra?: ReactNode; children: ReactNode; className?: string; flush?: boolean; scroll?: boolean }) {
+export function Card({ title, extra, children, className, flush, scroll, fill }: { title?: ReactNode; extra?: ReactNode; children: ReactNode; className?: string; flush?: boolean; scroll?: boolean; fill?: boolean }) {
   return (
     <section className={clsx("@container flex min-h-0 flex-col overflow-hidden rounded-md border border-line bg-panel", className)}>
       {title && (
@@ -75,7 +75,7 @@ export function Card({ title, extra, children, className, flush, scroll }: { tit
           {extra && <div className="ml-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs whitespace-nowrap text-subtle">{extra}</div>}
         </header>
       )}
-      <div className={clsx(flush ? "" : title ? "px-4 pb-4" : "p-4", scroll && "min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]")}>{children}</div>
+      <div className={clsx(flush ? "" : title ? "px-4 pb-4" : "p-4", scroll && "min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]", fill && "flex min-h-0 flex-1 flex-col")}>{children}</div>
     </section>
   );
 }
@@ -199,6 +199,78 @@ export function ScrollRow({ children, className, activeKey }: { children: ReactN
       className={clsx("flex overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)}
       style={{ maskImage: mask, WebkitMaskImage: mask }}>
       {children}
+    </div>
+  );
+}
+
+/**
+ * 关注 star. Ink / neutral only (orange and red stay reserved for the logo and for due dates).
+ * Filled when starred; outline otherwise. `reveal` hides an unstarred star until its row is hovered or the button is focused
+ * (rows mark themselves with `group/row`); on touch screens it is always shown.
+ */
+export function StarButton({ on, onToggle, name, size = 15, reveal, className }: { on: boolean; onToggle: () => void; name: string; size?: number; reveal?: boolean; className?: string }) {
+  return (
+    <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(); }} onKeyDown={(e) => e.stopPropagation()}
+      aria-pressed={on} aria-label={on ? `取消关注「${name}」` : `关注「${name}」`} title={on ? "取消关注" : "关注"}
+      className={clsx("grid shrink-0 place-items-center rounded-[6px] transition-[color,opacity] hover:bg-field focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ink/30",
+        on ? "text-ink" : "text-subtle hover:text-ink",
+        reveal && !on && "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
+        className ?? "size-7")}>
+      <Star size={size} strokeWidth={1.9} fill={on ? "currentColor" : "none"} />
+    </button>
+  );
+}
+
+/** `fill` (above): the body is a flex column that takes the card's remaining height, so a textarea inside can grow with it. */
+
+/** Read-only 关注 / 置顶 mark next to a name. */
+export function FocusMark({ starred, pinned, size = 12, className }: { starred?: boolean; pinned?: boolean; size?: number; className?: string }) {
+  if (!starred && !pinned) return null;
+  return (
+    <span className={clsx("inline-flex shrink-0 items-center gap-0.5 text-muted", className)} title={pinned ? "置顶 · 已关注" : "已关注"} aria-label={pinned ? "置顶，已关注" : "已关注"} role="img">
+      {pinned && <Pin size={size - 1} strokeWidth={2} className="text-subtle" />}
+      <Star size={size} strokeWidth={1.9} fill="currentColor" />
+    </span>
+  );
+}
+
+/** Small "更多" menu: a button that opens a list of actions. Escape / outside click closes; arrow keys move between items. */
+export function MoreMenu({ items, label = "更多操作" }: { items: { label: string; icon?: ReactNode; onSelect: () => void; danger?: boolean }[]; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); btn.current?.focus(); } };
+    addEventListener("mousedown", close);
+    addEventListener("keydown", key);
+    box.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    return () => { removeEventListener("mousedown", close); removeEventListener("keydown", key); };
+  }, [open]);
+  const move = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const all = Array.from(box.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    const i = all.indexOf(document.activeElement as HTMLElement);
+    all[(i + (e.key === "ArrowDown" ? 1 : -1) + all.length) % all.length]?.focus();
+  };
+  return (
+    <div ref={box} className="relative">
+      <button ref={btn} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={label} title={label}
+        className="grid size-8 place-items-center rounded-sm border border-line bg-panel text-muted hover:bg-field hover:text-ink">
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <div role="menu" onKeyDown={move} className="absolute right-0 z-40 mt-1 min-w-[148px] rounded-sm border border-line bg-panel py-1 shadow-lg">
+          {items.map((it) => (
+            <button key={it.label} type="button" role="menuitem" onClick={() => { setOpen(false); it.onSelect(); }}
+              className={clsx("flex h-8 w-full items-center gap-2 px-3 text-left text-[13px] whitespace-nowrap outline-none hover:bg-field focus:bg-field", it.danger ? "text-crit" : "text-ink")}>
+              {it.icon}{it.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

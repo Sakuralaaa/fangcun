@@ -6,7 +6,7 @@ import { ASSET_TYPES, TYPE_LABEL, type Asset, type AssetInput, type AssetType, t
 /** CSV columns, shared by every type so one file can be imported back. */
 export const CSV_COLUMNS = [
   "id", "type", "name", "subtitle", "provider", "price", "currency", "cycle", "expiresAt", "autoRenew", "purchasedAt",
-  "region", "discount", "tags", "related", "accountId", "details", "note",
+  "region", "discount", "tags", "related", "accountId", "details", "note", "starred", "pinned",
   "komariUuid", "trafficResetDay",
   "accountUsername", "accountSite",
   "phoneNumber", "phoneCarrier", "phoneCountry", "phonePurpose",
@@ -25,6 +25,7 @@ function row(a: Asset): Record<(typeof CSV_COLUMNS)[number], unknown> {
     cycle: a.cycle, expiresAt: a.expiresAt, autoRenew: a.autoRenew ? "yes" : "no", purchasedAt: a.purchasedAt,
     region: a.region, discount: a.discount, tags: a.tags.join(";"), related: a.related.join(";"), accountId: a.accountId,
     details: a.details.map((d) => `${d.label}=${d.value}`).join(";"), note: a.note,
+    starred: a.starred ? "yes" : "no", pinned: a.pinned ? "yes" : "no",
     komariUuid: a.komari?.uuid, trafficResetDay: a.komari?.trafficResetDay,
     accountUsername: a.account?.username, accountSite: a.account?.site,
     phoneNumber: a.phone?.number, phoneCarrier: a.phone?.carrier, phoneCountry: a.phone?.country, phonePurpose: a.phone?.purpose,
@@ -107,6 +108,9 @@ export function csvToInputs(text: string): AssetInput[] {
         details: list(get(r, "details")).map((d) => { const [label, ...v] = d.split("="); return { label, value: v.join("=") }; }),
         note: get(r, "note") || undefined,
       };
+      // 关注 / 置顶 only when the file has the column, so importing an older CSV never clears them
+      if (idx("starred") >= 0) input.starred = truthy(get(r, "starred"));
+      if (idx("pinned") >= 0) input.pinned = truthy(get(r, "pinned"));
       if (get(r, "komariUuid")) input.komari = { uuid: get(r, "komariUuid"), ...(get(r, "trafficResetDay") ? { trafficResetDay: Number(get(r, "trafficResetDay")) } : {}) };
       if (get(r, "accountUsername")) input.account = { username: get(r, "accountUsername"), site: get(r, "accountSite") || undefined };
       if (type === "phone") input.phone = { number: get(r, "phoneNumber") || input.name, carrier: get(r, "phoneCarrier") || undefined, country: get(r, "phoneCountry") || undefined, purpose: get(r, "phonePurpose") || undefined };

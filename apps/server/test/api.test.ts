@@ -6,7 +6,7 @@ import { readBackup } from "@fangcun/core";
 import { createApp } from "../src/app";
 import { totpAt } from "../src/auth";
 import { BackupService } from "../src/backup";
-import { openDb } from "../src/db";
+import { migrate, openDb } from "../src/db";
 import { assertAllowed, KomariService } from "../src/komari";
 import { Store } from "../src/store";
 
@@ -235,5 +235,60 @@ describe("备份", () => {
     expect(csv).toContain("4242");
     const ics = await (await call("GET", "/api/export/ics", { token: tokens.full })).text();
     expect(ics).toContain("BEGIN:VEVENT");
+  });
+});
+
+describe("关注 / 置顶", () => {
+  it("database migration gives existing assets starred = pinned = false", () => {
+    const db = openDb(":memory:");
+    db.prepare("INSERT INTO assets (id, type, name, data, updated_at) VALUES (?, ?, ?, ?, ?)").run("old", "domain", "old.dev",
+      JSON.stringify({ id: "old", type: "domain", name: "old.dev", price: 1, currency: "USD", cycle: "year", tags: [], details: [], related: [], renewals: [], autoRenew: false, updatedAt: "t" }), "t");
+    db.prepare("DELETE FROM _migrations WHERE version >= 2").run(); // pretend this library was created by v0.1.5
+    expect(migrate(db)).toBe(2);
+    expect(new Store(db).get("old")).toMatchObject({ starred: false, pinned: false, name: "old.dev" });
+  });
+
+  it("star / pin through /focus, permissions follow the token, list filter works", async () => {
+    await call("POST", "/api/assets", { token: tokens.full, body: { id: "f1", type: "domain", name: "focus.dev", price: 10, currency: "USD", cycle: "year", expiresAt: "2027-02-01" } });
+    expect(store.get("f1")).toMatchObject({ starred: false, pinned: false });
+    // 可写 token: a change plan, nothing lands yet
+    const plan = await json(call("POST", "/api/assets/f1/focus", { token: tokens.write, body: { starred: true } }));
+    expect(plan.status).toBe(202);
+    expect(store.get("f1")!.starred).toBe(false);
+    // signed-in user / 完全权限: direct; 置顶 implies 关注
+    const pin = await json(call("POST", "/api/assets/f1/focus", { token: tokens.full, body: { pinned: true } }));
+    expect(pin.data.assets[0]).toMatchObject({ starred: true, pinned: true });
+    expect(store.auditList({ assetId: "f1" })[0].summary).toBe("置顶「focus.dev」");
+    const starredOnly = await json(call("GET", "/api/assets?starred=1", { token: tokens.full }));
+    expect(starredOnly.data.assets.map((a: any) => a.id)).toEqual(["f1"]);
+    // 取消关注 clears 置顶 too
+    const off = await json(call("POST", "/api/assets/f1/focus", { body: { starred: false } }));
+    expect(off.data.assets[0]).toMatchObject({ starred: false, pinned: false });
+    expect(store.auditList({ assetId: "f1" })[0].summary).toBe("取消关注「focus.dev」");
+    // PATCH keeps the same rule
+    await call("PATCH", "/api/assets/f1", { body: { pinned: true } });
+    await call("PATCH", "/api/assets/f1", { body: { starred: false } });
+    expect(store.get("f1")).toMatchObject({ starred: false, pinned: false });
+    expect((await call("POST", "/api/assets/f1/focus", { body: {} })).status).toBe(400);
+    expect((await json(call("POST", "/api/assets/f1/focus", { body: { starred: false } }))).data.status).toBe("unchanged");
+  });
+
+  it("Komari sync keeps 关注 / 置顶", async () => {
+    const id = store.list().find((a) => a.komari?.uuid === "node-1")!.id;
+    await call("POST", `/api/assets/${id}/focus`, { body: { pinned: true } });
+    komariPrice = 31;
+    await call("POST", "/api/komari/sync");
+    const after = store.get(id)!;
+    expect(after.komari!.fields!.price).toBe(31);
+    expect(after).toMatchObject({ starred: true, pinned: true });
+  });
+
+  it("export and backup carry the fields", async () => {
+    await call("POST", "/api/assets/dom1/focus", { body: { starred: true } });
+    const csv = await (await call("GET", "/api/export/csv?type=domain", { token: tokens.full })).text();
+    expect(csv.split("\r\n")[0]).toContain("starred,pinned");
+    const b = await readBackup(new Uint8Array(await (await call("GET", "/api/backup/download", { token: tokens.full })).arrayBuffer()));
+    expect(b.manifest.schemaVersion).toBe(3);
+    expect(b.data.assets.find((a) => a.id === "dom1")).toMatchObject({ starred: true, pinned: false });
   });
 });

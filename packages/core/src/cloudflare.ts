@@ -135,9 +135,26 @@ export function pickCfBucket(x: Record<string, unknown>, accountId: string): CfR
 
 // ---------------- token permissions ----------------
 
-/** A permission group grants more than reading when its name says Edit / Write (or an action like Purge, Revoke, Run, Admin). */
-const WRITE_PERM = /\b(edit|write|purge|revoke|run|admin|editor)\b/i;
-export const isWritePermission = (name: string) => WRITE_PERM.test(name);
+/** How much a Cloudflare permission group grants, judged from its access level (the end of its name). */
+export type CfPermLevel = "read" | "write" | "unknown";
+
+/**
+ * The access level is the last word of the group name; product names may contain action words themselves
+ * (「Browser Run Read」 is the read permission of the Browser Run product). So:
+ *  - ends in Read / Reader (ignoring case, trailing spaces and a trailing (note)) → read;
+ *  - ends in Edit / Write / Editor or an explicit action (Purge, Revoke, Admin, Run) → write;
+ *  - a few read groups Cloudflare names without "Read": "… - Read PCAPs API", "Security Center Insights", "Zero Trust Report";
+ *  - anything else → unknown: not refused, listed in settings as 「无法判断，请自查」.
+ */
+export function permissionLevel(name: string): CfPermLevel {
+  const n = name.trim().replace(/\s*[(（][^()（）]*[)）]\s*$/, "").trim();
+  if (/\b(read|reader)$/i.test(n)) return "read";
+  if (/\b(edit|write|editor|purge|revoke|admin|run)$/i.test(n)) return "write";
+  if (/\s-\s*write\b/i.test(n)) return "write";
+  if (/\s-\s*read\b/i.test(n) || /\b(security center insights|zero trust report)$/i.test(n)) return "read";
+  return "unknown";
+}
+export const isWritePermission = (name: string) => permissionLevel(name) === "write";
 /** Names of every allowed permission group on a token (GET /user/tokens/{id} or /accounts/{a}/tokens/{id}). */
 export function tokenPermissionNames(token: unknown): string[] {
   const out = new Set<string>();

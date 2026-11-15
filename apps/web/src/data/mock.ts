@@ -7,7 +7,7 @@ const T = "2026-11-15T03:00:00.000Z";
 
 type Seed = Partial<Asset> & Pick<Asset, "id" | "type" | "name">;
 const mk = (s: Seed): Asset => ({
-  price: 0, currency: "USD", cycle: "month", autoRenew: false, tags: [], details: [], related: [], renewals: [],
+  price: 0, currency: "USD", cycle: "month", autoRenew: false, tags: [], details: [], related: [], renewals: [], starred: false, pinned: false,
   createdAt: T, updatedAt: T, deletedAt: null, ...s,
 });
 const kom = (uuid: string, overridden: NonNullable<Asset["komari"]>["overridden"] = {}, trafficResetDay?: number): Asset["komari"] => ({
@@ -22,7 +22,7 @@ export const demoAssets: Asset[] = [
   mk({ id: "acc-ai", type: "account", name: "AI 平台", subtitle: "订阅付款账号", provider: "AI 平台", cycle: "once", account: { username: "sak@starbridge.example", site: "platform.ai.example" } }),
   mk({ id: "acc-mail", type: "account", name: "企业邮箱后台", subtitle: "管理员", provider: "企业邮箱", cycle: "once", account: { username: "admin@starbridge.example", site: "mail.starbridge.example" } }),
 
-  mk({ id: "hk-api-02", type: "server", name: "hk-api-02", subtitle: "香港 API 副节点", provider: "演示云",
+  mk({ id: "hk-api-02", starred: true, type: "server", name: "hk-api-02", subtitle: "香港 API 副节点", provider: "演示云",
     price: 24, currency: "USD", cycle: "month", expiresAt: "2026-11-22", autoRenew: false, purchasedAt: "2025-11-22",
     tags: ["星桥商城", "production"], accountId: "acc-cloud", related: ["api-cert", "starbridge", "hk-api-01", "card-wise"],
     note: "星桥商城 API 的备用节点。到期前确认流量是否还需要两台，不需要就并到 hk-api-01。",
@@ -36,7 +36,7 @@ export const demoAssets: Asset[] = [
       { date: "2026-08-22", amount: 24, note: "手动续费" },
     ],
     komari: kom("7f3c-hk02", { price: { komari: 20 } }, 1) }),
-  mk({ id: "hk-api-01", type: "server", name: "hk-api-01", subtitle: "香港 API 主节点", provider: "演示云",
+  mk({ id: "hk-api-01", starred: true, pinned: true, type: "server", name: "hk-api-01", subtitle: "香港 API 主节点", provider: "演示云",
     price: 24, currency: "USD", cycle: "month", expiresAt: "2027-01-02", autoRenew: true, purchasedAt: "2025-01-02",
     tags: ["星桥商城", "production"], accountId: "acc-cloud", related: ["hk-api-02"],
     details: [{ label: "IPv4", value: "192.0.2.10", mono: true }, { label: "地区", value: "香港" }, { label: "CPU", value: "4 核" }, { label: "内存", value: "8 GB" }, { label: "硬盘", value: "80 GB" }, { label: "系统", value: "Ubuntu 24.04" }],
@@ -70,7 +70,7 @@ export const demoAssets: Asset[] = [
     price: 0, cycle: "quarter", expiresAt: "2026-11-19", purchasedAt: "2026-08-21",
     tags: ["星桥商城"], related: ["hk-api-02", "starbridge"], note: "自动续期脚本 10 月迁机后没恢复，要手动续。",
     details: [{ label: "域名", value: "api.starbridge.example", mono: true }, { label: "签发者", value: "R11" }, { label: "类型", value: "ECDSA P-256" }, { label: "部署在", value: "hk-api-01 / 02" }] }),
-  mk({ id: "starbridge", type: "domain", name: "starbridge.example", subtitle: "主域名", provider: "域名注册商",
+  mk({ id: "starbridge", starred: true, pinned: true, type: "domain", name: "starbridge.example", subtitle: "主域名", provider: "域名注册商",
     price: 88, currency: "CNY", cycle: "year", expiresAt: "2026-12-03", purchasedAt: "2021-12-03",
     tags: ["星桥商城"], accountId: "acc-reg", related: ["api-cert"],
     details: [{ label: "DNS", value: "Cloudflare" }, { label: "注册人", value: "个人" }, { label: "实名", value: "已完成" }, { label: "转移锁", value: "开启" }],
@@ -78,7 +78,7 @@ export const demoAssets: Asset[] = [
   mk({ id: "sak-dev", type: "domain", name: "sak.dev", subtitle: "个人站", provider: "域名注册商",
     price: 12, cycle: "year", expiresAt: "2027-06-11", autoRenew: true, purchasedAt: "2023-06-11",
     tags: ["个人"], accountId: "acc-reg", details: [{ label: "DNS", value: "Cloudflare" }] }),
-  mk({ id: "ai-code", type: "subscription", name: "研发编程助手", subtitle: "AI 订阅 · Pro", provider: "AI 平台",
+  mk({ id: "ai-code", starred: true, type: "subscription", name: "研发编程助手", subtitle: "AI 订阅 · Pro", provider: "AI 平台",
     price: 100, cycle: "month", expiresAt: "2026-11-30", autoRenew: true, purchasedAt: "2025-08-30",
     tags: ["工作"], accountId: "acc-ai", related: ["card-wise"],
     details: [{ label: "套餐", value: "Pro" }],
@@ -91,7 +91,7 @@ export const demoAssets: Asset[] = [
           windows: [{ label: "5 小时", usedPct: 100, resetAt: "2026-11-15 12:10" }, { label: "每周", usedPct: 81, resetAt: "2026-11-17 02:00" }] },
       ],
     } }),
-  mk({ id: "gpt-team", type: "subscription", name: "ChatGPT Team", subtitle: "团队订阅 · 2 个工作空间", provider: "OpenAI",
+  mk({ id: "gpt-team", starred: true, type: "subscription", name: "ChatGPT Team", subtitle: "团队订阅 · 2 个工作空间", provider: "OpenAI",
     price: 1380, currency: "CNY", cycle: "month", expiresAt: "2026-11-26", autoRenew: true, purchasedAt: "2026-03-26",
     tags: ["工作", "号池"], accountId: "acc-ai", related: ["card-onekey"], details: [{ label: "母号", value: "owner@starbridge.example" }],
     team: {
@@ -122,7 +122,7 @@ export const demoAssets: Asset[] = [
     price: 3, cycle: "month", expiresAt: "2026-12-01", autoRenew: true, purchasedAt: "2025-06-01", tags: ["个人"],
     phone: { number: "+1 (555) 010-2233", carrier: "虚拟号码平台", country: "美国", purpose: "海外服务注册验证" },
     note: "每 90 天至少收一条短信保号。" }),
-  mk({ id: "card-wise", type: "payment", name: "美元虚拟卡", subtitle: "Visa ···· 4242", provider: "示例数字银行",
+  mk({ id: "card-wise", starred: true, type: "payment", name: "美元虚拟卡", subtitle: "Visa ···· 4242", provider: "示例数字银行",
     price: 0, cycle: "year", purchasedAt: "2025-03-02", tags: ["支付"], related: ["hk-api-02", "ai-code", "ai-chat"],
     payment: { issuer: "示例数字银行", network: "Visa", last4: "4242", cardExpiry: "2028-09", billingRegion: "美国", fees: "开卡免费 · 充值 0.5%", status: "active" },
     expiresAt: "2028-09-30" }),
@@ -130,6 +130,15 @@ export const demoAssets: Asset[] = [
     price: 1, cycle: "month", purchasedAt: "2026-01-12", tags: ["支付", "号池"], related: ["gpt-team"],
     payment: { issuer: "示例 U 卡平台", network: "Mastercard", last4: "8817", cardExpiry: "2026-12", billingRegion: "香港", fees: "开卡 $10 · USDT 充值 1.5%", status: "active" },
     expiresAt: "2026-12-31", note: "只用来付团队订阅；余额低于 $50 记得充值。" }),
+  // Sparse records, like real libraries: one or two fields, no note, no renewals, no purchase date, expiry in another year.
+  mk({ id: "lab-xyz", type: "domain", name: "lab-sample.xyz", provider: "Cloudflare", price: 10.44, cycle: "year", expiresAt: "2027-08-06",
+    details: [{ label: "DNS 托管", value: "Cloudflare" }] }),
+  mk({ id: "spare-vps", type: "server", name: "spare-vps", provider: "小鸡云", price: 4, cycle: "month", expiresAt: "2027-01-28",
+    details: [{ label: "IPv4", value: "203.0.113.9", mono: true }] }),
+  mk({ id: "notes-app", type: "subscription", name: "笔记应用", price: 96, currency: "CNY", cycle: "year", expiresAt: "2027-01-10", autoRenew: true }),
+  mk({ id: "lab-cert", type: "cert", name: "*.lab-sample.xyz", provider: "Let's Encrypt", cycle: "quarter", expiresAt: "2027-02-02", autoRenew: true }),
+  mk({ id: "lab-mail", type: "mail", name: "hi@lab-sample.xyz", cycle: "year" }),
+  mk({ id: "doc-transfer", type: "document", name: "域名转移授权", cycle: "once" }),
 ];
 
 const st = (s: Partial<NodeStatus> & Pick<NodeStatus, "uuid">): NodeStatus => ({

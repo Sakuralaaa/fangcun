@@ -1,7 +1,7 @@
 import { perSeat } from "@fangcun/core";
 import clsx from "clsx";
 import type { Team, TeamMember, Workspace } from "../data/types";
-import { cycleLabel, daysUntil, money, ymd } from "../lib/fmt";
+import { cycleLabel, daysUntil, money, dateLabel } from "../lib/fmt";
 import { Card } from "./ui";
 
 export function TeamCard({ team }: { team: Team }) {
@@ -30,7 +30,7 @@ function WorkspaceBlock({ w }: { w: Workspace }) {
         <span className="shrink-0 text-[14px] font-semibold whitespace-nowrap">{w.name}</span>
         <span className="min-w-0 flex-1 basis-[140px] truncate text-xs text-subtle">{meta}</span>
         <span className="shrink-0 text-[13px] whitespace-nowrap tnum">{money(w.price, w.currency)}<span className="text-subtle">/{cycleLabel[w.cycle]}</span></span>
-        <span className={clsx("w-[76px] shrink-0 text-right text-xs whitespace-nowrap tnum", d <= 7 ? "font-semibold text-crit" : d <= 14 ? "font-semibold text-warn" : "text-subtle")}>{w.expiresAt ? `${ymd(w.expiresAt).slice(5)} 到期` : "—"}</span>
+        <span className={clsx("w-[76px] shrink-0 text-right text-xs whitespace-nowrap tnum", d <= 7 ? "font-semibold text-crit" : d <= 14 ? "font-semibold text-warn" : "text-subtle")}>{w.expiresAt ? `${dateLabel(w.expiresAt)} 到期` : "—"}</span>
       </div>
       {members.length > 0 && (
         <div className={clsx("mt-2 grid items-center gap-x-6 text-xs text-subtle", hasQuota ? "grid-cols-[minmax(0,1fr)_88px_88px] @lg:grid-cols-[minmax(0,1fr)_120px_120px]" : "grid-cols-1")}>

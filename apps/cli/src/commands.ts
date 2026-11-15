@@ -1,22 +1,25 @@
 import {
-  CARD_STATUS_LABEL, CYCLES, daysUntil, dueLabel, money, perCycle, todayIso, TYPE_LABEL,
+  CARD_STATUS_LABEL, compareAssets, CYCLES, daysUntil, dueLabel, money, perCycle, todayIso, TYPE_LABEL,
   type Asset, type AssetType, type Cycle,
 } from "@fangcun/core";
 import { enc, type Client } from "./client";
 
 /** Shared operations used by both the CLI and the MCP server. Return plain JSON. */
 export const ops = {
-  async list(c: Client, f: { type?: string; tag?: string; q?: string; due?: number; deleted?: boolean } = {}) {
+  async list(c: Client, f: { type?: string; tag?: string; q?: string; due?: number; deleted?: boolean; starred?: boolean } = {}) {
     const qs = new URLSearchParams();
     if (f.type) qs.set("type", f.type);
+    if (f.starred) qs.set("starred", "1");
     if (f.tag) qs.set("tag", f.tag);
     if (f.q) qs.set("q", f.q);
     if (f.deleted) qs.set("deleted", "1");
     const r = await c.get(`/api/assets?${qs}`);
     let assets: Asset[] = r.assets;
     if (f.due !== undefined) assets = assets.filter((a) => daysUntil(a.expiresAt, r.today) <= f.due!);
-    return assets.sort((a, b) => daysUntil(a.expiresAt, r.today) - daysUntil(b.expiresAt, r.today));
+    return assets.sort((a, b) => compareAssets(a, b, r.today));
   },
+  /** 关注 / 置顶. 取消关注 also 取消置顶; 置顶 also 关注 (the server keeps them consistent). */
+  focus: (c: Client, id: string, f: { starred?: boolean; pinned?: boolean }) => c.post(`/api/assets/${enc(id)}/focus`, f),
   show: async (c: Client, id: string) => (await c.get(`/api/assets/${enc(id)}`)).asset as Asset,
   create: (c: Client, input: Partial<Asset>) => c.post("/api/assets", input),
   update: (c: Client, id: string, patch: Partial<Asset>) => c.patch(`/api/assets/${enc(id)}`, patch),
@@ -53,7 +56,7 @@ export function parseSets(pairs: string[]): Partial<Asset> {
 function coerce(key: string, raw: string): unknown {
   const k = key.split(".").at(-1)!;
   if (["price", "seats", "trafficResetDay"].includes(k)) return Number(raw);
-  if (["autoRenew", "hasTotp"].includes(k)) return /^(1|true|yes|是|on)$/i.test(raw);
+  if (["autoRenew", "hasTotp", "starred", "pinned"].includes(k)) return /^(1|true|yes|是|on)$/i.test(raw);
   if (["tags", "related"].includes(k)) return raw.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
   if (["expiresAt", "purchasedAt", "accountId"].includes(k) && (raw === "" || raw === "null")) return null;
   return raw;
@@ -84,14 +87,17 @@ export function table(rows: string[][], header: string[]): string {
 export function assetRows(assets: Asset[], today = todayIso()): string {
   if (!assets.length) return "（没有资产）";
   return table(assets.map((a) => [
-    a.id, TYPE_LABEL[a.type] ?? a.type, a.name, a.provider ?? "", perCycle(a),
+    focusMark(a), a.id, TYPE_LABEL[a.type] ?? a.type, a.name, a.provider ?? "", perCycle(a),
     a.expiresAt ?? "—", dueLabel(a.expiresAt, today),
-  ]), ["ID", "类型", "名称", "服务商", "费用", "到期", "剩余"]);
+  ]), ["", "ID", "类型", "名称", "服务商", "费用", "到期", "剩余"]);
 }
+
+/** ★ = 关注, ★↑ = 置顶 (pinned implies starred). */
+export const focusMark = (a: Pick<Asset, "starred" | "pinned">) => (a.pinned ? "★↑" : a.starred ? "★" : "");
 
 export function assetDetail(a: Asset, today = todayIso()): string {
   const lines: [string, string][] = [
-    ["ID", a.id], ["类型", TYPE_LABEL[a.type]], ["名称", a.name], ["说明", a.subtitle ?? ""], ["服务商", a.provider ?? ""],
+    ["ID", a.id], ["关注", a.pinned ? "已关注 · 置顶" : a.starred ? "已关注" : ""], ["类型", TYPE_LABEL[a.type]], ["名称", a.name], ["说明", a.subtitle ?? ""], ["服务商", a.provider ?? ""],
     ["费用", perCycle(a) + (a.region ? ` · ${a.region}` : "") + (a.discount ? ` · ${a.discount}` : "")],
     ["到期", a.expiresAt ? `${a.expiresAt}（${dueLabel(a.expiresAt, today)}）${a.autoRenew ? " · 自动续费" : ""}` : "长期"],
     ["购入", a.purchasedAt ?? ""], ["标签", a.tags.map((t) => `#${t}`).join(" ")], ["关联", a.related.join(", ")],

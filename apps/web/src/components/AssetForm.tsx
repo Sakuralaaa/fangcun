@@ -32,7 +32,9 @@ export function AssetForm({ asset, initialType, onClose, onSaved }: { asset?: As
   const save = async () => {
     setBusy(true);
     try {
-      const body = { ...d };
+      // 关注 / 置顶 are toggled from the star and the 更多 menu; the edit form never overwrites them
+      const { starred: _s, pinned: _p, ...rest } = d as Draft & { starred?: boolean; pinned?: boolean };
+      const body = isNew ? { ...d } : rest;
       if (body.type === "payment" && body.payment) body.payment = { ...body.payment, last4: (body.payment.last4 ?? "").replace(/\D/g, "") };
       const r = isNew ? await create(body) : await update(asset!.id, body);
       onSaved(r?.id ?? null);

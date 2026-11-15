@@ -336,7 +336,7 @@ export function assetFromClient(c: KomariClient, settings: Pick<KomariSettings, 
   const mapped = mapClient(c);
   const base: Asset = {
     id: "", type: "server", name: c.name || c.uuid.slice(0, 8), price: 0, currency: "USD", cycle: "month", autoRenew: false,
-    tags: [], details: [], related: [], renewals: [], createdAt: "", updatedAt: "",
+    tags: [], details: [], related: [], renewals: [], starred: false, pinned: false, createdAt: "", updatedAt: "",
     komari: { uuid: c.uuid, fields: {}, overridden: {} },
   };
   for (const [key, group] of Object.entries(KOMARI_KEYS)) {

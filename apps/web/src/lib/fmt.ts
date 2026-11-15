@@ -25,3 +25,6 @@ export const perCycle = (a: Pick<Asset, "price" | "currency" | "cycle">) => core
 
 /** Monthly cost in the display currency using the user's own rates; 0 when a rate is missing. */
 export const monthlyDisplay = (a: Asset, d: DisplaySettings) => toDisplay(monthlyCost(a), a.currency, d) ?? 0;
+
+/** Calendar date for display: MM/DD inside the current year, YYYY/MM/DD otherwise (one rule site-wide). */
+export const dateLabel = (iso: string) => (iso.slice(0, 4) === today.slice(0, 4) ? iso.slice(5, 10).replace("-", "/") : iso.slice(0, 10).replaceAll("-", "/"));

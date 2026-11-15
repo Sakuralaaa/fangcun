@@ -90,6 +90,25 @@ FANGCUN_DATA_DIR=./data KOMARI_API_KEY=xxx npm start   # http://localhost:8080
 | `COOKIE_SECURE` | 自动 | `1` 强制 Secure cookie，`0` 关闭 |
 | `TZ` | 系统 | 每日自动备份按此时区判断日期 |
 
+读取 `KOMARI_API_KEY` / `ATOLL_API_KEY` / `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 时会自动去掉首尾空白和换行、成对包裹的引号（docker-compose 列表写法 `- X="..."` 会把引号带进值）以及误粘贴的 `Bearer ` 前缀。**改了环境变量后要重建容器**（`docker compose up -d --force-recreate`），只 `restart` 不会读到新值。
+
+## 设置页说明（界面上不再重复）
+
+- **常规 / 汇率**：价格一律按实付手填，不做换算；汇率只用于总览、费用页里的「约」合计。自动更新时每 6 小时从欧洲央行参考汇率（Frankfurter）拉取，缺的币种用 open.er-api 补；关闭后每行写 `币种=数值`（1 个合计币种可兑换多少该币种）手动维护。
+- **登录与两步验证**：单用户，只有你自己的管理员账号。开启 TOTP 后登录需要动态码；网页里备份、导出、恢复和调整自动备份设置前也要再输一次动态码（10 分钟内有效）。改密码会退出其他设备上的登录。
+- **变更审批**：「可写」令牌提交的改动停在这里，批准后才写入；冲突的计划不会覆盖之后的修改。
+- **操作日志**：所有写入都会记录（包括 CLI、AI 代理和 Komari 同步），可以逐条撤销。
+- **回收站**：删除的资产保留 30 天，之后自动永久删除。
+- **备份**：完整备份 `.fangcun` 见下文「备份、导出与恢复」；建议先开启两步验证。可读导出不含任何密码。
+
+## 关注与置顶（v0.1.6）
+
+- 资产列表每行右侧有星标（悬停或已关注时显示，键盘可达），点一下「关注」；资产详情标题旁也有星标，「更多」菜单里可「置顶 / 取消置顶」。
+- **置顶隐含关注**：置顶一项会同时关注它；取消关注会同时取消置顶。
+- 资产列表：置顶项排最前（单独一组），其次照原到期紧急度；筛选标签里有「关注 N」。总览有「关注」区块（30 天内到期的关注项最先），服务器页关注的节点排前并显示星标。
+- 关注 / 置顶只由你改动：Komari / Atoll / Cloudflare 同步、资产编辑表单都不会覆盖它们；导入导出（CSV 列 `starred` / `pinned`、JSON）与备份都带上，旧数据默认不关注。
+- CLI：`fangcun ls --starred`、`fangcun star|unstar|pin|unpin <id>`；MCP：`list_assets` 的 `starred_only`、`set_focus`。权限同其他写操作（可写令牌生成变更计划）。
+
 ## Komari 接入（只读）
 
 适配 Komari 1.2.5。在「设置 → Komari 探针」填写探针地址，API Key 由服务端环境变量 `KOMARI_API_KEY` 提供。
@@ -103,6 +122,7 @@ Komari 的 API Key 在它的管理后台「设置 → 登录」页最下方的�
   - 绝不调用任何写接口、exec 或终端接口。
 - **按 uuid 绑定**：节点可以绑到已有的服务器资产，或一键新建。
 - **同步字段**（每组可在设置里开关）：价格与币种、续费周期、到期日、自动续费、配置与系统（CPU / 内存 / 硬盘 / OS）、IP 与地区、标签。
+- 设置里关掉的字段只在方寸里维护，不再以 Komari 为准。
 - **已手动修改**：你在方寸里改过的同步字段会标「已手动修改」，之后同步不会覆盖；Komari 那边的值变了会提示「Komari 已变为 …」，可一键恢复。
 - **运行状态**：浏览器只连方寸，不直连 Komari。有人在看时前端每 10 秒轮询，方寸服务端合并请求、8 秒内复用；没人看时后台每 5 分钟刷新一次缓存。
 - **服务器页**：在线节点、累计流量、实时带宽、资产概览（按设置里的汇率换算）四张汇总卡；按 Komari 分组（没有分组时按标签）筛选；大卡片 / 紧凑卡片 / 列表三种布局（记在本机）。CPU、内存、磁盘、负载、剩余流量用分段条显示，80% 以上转橙、90% 以上转红。
@@ -143,6 +163,7 @@ fangcun edit hk-api-02 --set price=24 --set note="续费前确认流量"
 fangcun tag ai-chat +个人 -工作
 fangcun link ai-code card-wise            # 双向关联：这个订阅用这张卡付款
 fangcun renew starbridge --amount 88 --note 手动续费
+fangcun star hk-api-02                    # 关注；pin 置顶（同时关注），unstar 取消关注（同时取消置顶）
 fangcun rm la-lab                         # 进回收站
 fangcun import assets.csv                 # 或 .json
 fangcun export --format csv -o all.zip    # json | csv | ics
@@ -158,7 +179,7 @@ fangcun restore fangcun.fangcun --dry-run # 预览差异；--mode merge | replac
 
 ### MCP：给 Codex / Claude Code 用
 
-`fangcun mcp` 以 stdio 方式运行 MCP server，暴露同样的能力（list_assets、search_assets、get_asset、create_asset、update_asset、tag_asset、link_assets、renew_asset、delete_asset、doctor、audit_log、undo、import_assets、pending_plans），权限由令牌决定——建议给 AI 代理用「可写（需审批）」令牌。
+`fangcun mcp` 以 stdio 方式运行 MCP server，暴露同样的能力（list_assets、search_assets、get_asset、create_asset、update_asset、tag_asset、link_assets、renew_asset、delete_asset、doctor、audit_log、undo、import_assets、pending_plans、set_focus），权限由令牌决定——建议给 AI 代理用「可写（需审批）」令牌。
 
 ```jsonc
 // Claude Code: .mcp.json   /   Codex: ~/.codex/config.toml 里 [mcp_servers.fangcun] 同理
@@ -193,7 +214,7 @@ Atoll 是自托管的多 VPS 容器面板。方寸只读取它的服务器、项
 **部署步骤：**
 
 1. 在 Atoll 面板左侧点「连接」→「API 令牌」→「创建令牌」，权限预设选 **「只读」**（只勾 read，默认的「部署」不要用），项目范围选「所有项目」，创建后复制只显示一次的 `atl_pat_…`。
-2. 把它设为方寸服务端的环境变量 `ATOLL_API_KEY`（compose 里取消注释那一行，写进 `.env`），重启容器。
+2. 把它设为方寸服务端的环境变量 `ATOLL_API_KEY`（compose 里取消注释那一行，写进 `.env`），重建容器（`docker compose up -d --force-recreate`）。
 3. 在方寸「设置 → Atoll 面板」填写面板地址（如 `https://atoll.example.com`），选同步间隔（5 / 15 / 30 分钟或每小时），点「立即同步」。
 
 **安全约束：**
@@ -218,13 +239,14 @@ Atoll 是自托管的多 VPS 容器面板。方寸只读取它的服务器、项
    - 账户：Account Settings · Read（设置了 `CLOUDFLARE_ACCOUNT_ID` 可不勾）、Registrar Domains · Read、Cloudflare Tunnel · Read、Workers Scripts · Read、Cloudflare Pages · Read、Workers R2 Storage · Read
    - 区域：Zone · Read、DNS · Read（区域资源选「所有区域」或指定区域）
    - 用户（可选）：API Tokens · Read —— 让方寸核对令牌自身是否只读；不勾则设置页提示你自检
-2. 设为服务端环境变量 `CLOUDFLARE_API_TOKEN`（可选 `CLOUDFLARE_ACCOUNT_ID`），重启容器。
+2. 设为服务端环境变量 `CLOUDFLARE_API_TOKEN`（可选 `CLOUDFLARE_ACCOUNT_ID`；`cfat_` 开头的账户令牌必须设置），重建容器（`docker compose up -d --force-recreate`）。也可以直接用 Cloudflare 的「Read all resources」模板。
 3. 「设置 → Cloudflare」点「立即同步」。之后每 10 分钟最多自动刷新一次。
 
 **安全约束：**
 
 - 服务端客户端**只能发 GET**，路径与查询参数都有白名单（`/user/tokens/verify`、`/accounts`、`/zones`、`/zones/{id}/dns_records`、`/accounts/{id}/registrar/registrations`（旧 `/registrar/domains` 兜底）、`/cfd_tunnel` 及其 `configurations` / `connections`、`/workers/scripts`、`/workers/domains`、`/pages/projects`、`/r2/buckets`；查询参数只允许 `page` / `per_page` / `cursor` / `is_deleted=false`），其他请求在发出前就被拒绝（有单测覆盖）。
-- 每次同步先校验令牌；能读到令牌权限时，**含任何 Edit / Write（以及 Purge、Revoke、Run 这类动作）就拒绝使用**；读不到时照常同步并提醒你自检。
+- 每次同步先校验令牌；能读到令牌权限时按**权限组名末尾的访问级别**判断：以 Read / Reader 结尾（忽略大小写、尾部空白和括号注释）一律只读（如「Browser Run Read」）；以 Edit / Write 结尾或末尾是 Purge、Revoke、Admin、Run 这类动作的算写，**含任何写权限就拒绝使用**；另有几个官方只读组不以 Read 结尾（Security Center Insights、Zero Trust Report、Packet Captures - Read PCAPs API）。其他无法判断的不拒绝，在设置页列为「无法判断，请自查」。读不到权限时照常同步并提醒你自检。
+- 令牌被拒（401/403）时，提示里会给出令牌类型（只显示前 5 个字符：`cfat_` 账户令牌 / `cfut_` 或旧格式用户令牌）、长度是否异常、是否自动去掉了引号等，`cfat_` 而没设 `CLOUDFLARE_ACCOUNT_ID` 会明确提示；令牌若设置了「客户端 IP 地址筛选」，要包含方寸服务器的出口 IP。
 - 缺某项权限只把那一项标为「未授权」，其他照常。只存一份精简快照，TXT / MX 等记录、令牌、凭据一到就丢弃。
 
 **怎么对上号（只是视图，不写进资产）：**

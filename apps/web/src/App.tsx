@@ -3,7 +3,7 @@ import { ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AssetDetail } from "./components/AssetDetail";
 import { AssetForm } from "./components/AssetForm";
-import { AssetList } from "./components/AssetList";
+import { AssetList, matchFilter, type ListFilter } from "./components/AssetList";
 import { Costs } from "./components/Costs";
 import { Login } from "./components/Login";
 import { Overview } from "./components/Overview";
@@ -13,14 +13,15 @@ import { Settings } from "./components/Settings";
 import { Button, Field, Modal, TextInput } from "./components/ui";
 import type { AssetType } from "./data/types";
 import { get, onStepUp, post } from "./lib/api";
-import { daysUntil } from "./lib/fmt";
+import { compareAssets } from "@fangcun/core";
+import { daysUntil, getToday } from "./lib/fmt";
 import { DataProvider, isDemo, useData, type Me } from "./lib/store";
 
 /** Hash routes: #/overview · #/assets/<id>?type=server · #/servers · #/costs · #/settings/<tab> — plus ?theme=dark&demo=1. */
 function parse() {
   const [path, q = ""] = location.hash.replace(/^#\/?/, "").split("?");
   const [section = "overview", id] = path.split("/");
-  return { section: section as Section, id: id ? decodeURIComponent(id) : undefined, type: (new URLSearchParams(q).get("type") ?? "all") as AssetType | "all" };
+  return { section: section as Section, id: id ? decodeURIComponent(id) : undefined, type: (new URLSearchParams(q).get("type") ?? "all") as ListFilter };
 }
 
 export default function App() {
@@ -76,7 +77,7 @@ function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void
   };
   const select = (id: string) => go(`/assets/${encodeURIComponent(id)}${route.section === "assets" && route.type !== "all" ? `?type=${route.type}` : ""}`);
 
-  const filtered = assets.filter((a) => route.type === "all" || a.type === route.type).sort((a, b) => daysUntil(a.expiresAt) - daysUntil(b.expiresAt));
+  const filtered = assets.filter((a) => matchFilter(a, route.type)).sort((a, b) => compareAssets(a, b, getToday()));
   const asset = assets.find((a) => a.id === route.id) ?? filtered[0];
   const active: Section = route.section === "assets" && route.type === "account" ? "accounts" : route.section === "assets" && route.type === "document" ? "docs" : route.section;
   const dot = assets.some((a) => daysUntil(a.expiresAt) <= 7);
@@ -88,7 +89,7 @@ function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void
         {route.section === "overview" && <Overview onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} onAdd={() => setForm({})} onNav={go} />}
         {route.section === "assets" && (
           <>
-            <AssetList className={clsx(route.id && "max-lg:hidden")} selected={asset?.id} filter={route.type} onSelect={select} onFilter={(t) => go(`/assets${t === "all" ? "" : `?type=${t}`}`)} onAdd={() => setForm({ type: route.type === "all" ? undefined : route.type })} />
+            <AssetList className={clsx(route.id && "max-lg:hidden")} selected={asset?.id} filter={route.type} onSelect={select} onFilter={(t) => go(`/assets${t === "all" ? "" : `?type=${t}`}`)} onAdd={() => setForm({ type: route.type === "all" || route.type === "starred" ? undefined : route.type })} />
             {asset ? <AssetDetail className={clsx(!route.id && "max-lg:hidden")} asset={asset} onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} onEdit={() => setForm({ id: asset.id })}
                 onBack={() => go(`/assets${route.type === "all" ? "" : `?type=${route.type}`}`)} />
               : <main className="grid flex-1 place-items-center max-lg:hidden text-[13px] text-subtle">{route.type === "document" ? "还没有文档。合同、发票可以作为「文档」资产保存附件。" : "选择左侧的资产查看详情"}</main>}

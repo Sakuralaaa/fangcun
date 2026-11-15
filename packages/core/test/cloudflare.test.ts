@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildAtollView, buildCloudflareView, checkHost, expectedForAtollHost, isWritePermission, pickCfRecord, pickCfRegistration, tokenPermissionNames,
+  buildAtollView, buildCloudflareView, checkHost, expectedForAtollHost, isWritePermission, permissionLevel, pickCfRecord, pickCfRegistration, tokenPermissionNames,
   tunnelHostnames, tunnelIdOf, tunnelOriginIps, zoneForHost, zoneToAssetInput,
   type Asset, type AtollSnapshot, type CfSnapshot, type CfZone,
 } from "../src";
 
 const T = "Sun 2026-11-15 12:00 AM UTC (UTC+00:00)";
 const mk = (s: Partial<Asset> & Pick<Asset, "id" | "type" | "name">): Asset => ({
-  price: 0, currency: "USD", cycle: "year", autoRenew: false, tags: [], details: [], related: [], renewals: [], createdAt: T, updatedAt: T, ...s,
+  price: 0, currency: "USD", cycle: "year", autoRenew: false, tags: [], details: [], related: [], renewals: [], starred: false, pinned: false, createdAt: T, updatedAt: T, ...s,
 });
 const zone = (id: string, name: string): CfZone => ({ id, name, status: "active", paused: false, accountId: "acc", nameServers: ["ada.ns.cloudflare.com", "bob.ns.cloudflare.com"] });
 const TUN = "c1744f8b-faa1-48a4-9e5c-02ac921467fa";
@@ -45,7 +45,7 @@ const assets = [
 
 describe("Cloudflare token permissions", () => {
   it("treats any Edit / Write group as not read-only", () => {
-    expect(["Zone Read", "DNS Read", "Account Settings Read", "Cloudflare Tunnel Read", "Workers R2 Storage Read"].some(isWritePermission)).toBe(false);
+    expect(["Zone Read", "DNS Read", "Account Settings Read", "Cloudflare Tunnel Read", "Workers R2 Storage Read", "Browser Run Read", "Access: Audit Logs Read"].some(isWritePermission)).toBe(false);
     for (const n of ["DNS Write", "Zone Edit", "Cloudflare Pages Edit", "Cache Purge", "Access: Apps Revoke", "AI Gateway Run"]) expect(isWritePermission(n), n).toBe(true);
   });
   it("collects the allowed permission group names of a token", () => {
@@ -171,3 +171,25 @@ describe("checkHost (Atoll hostname ↔ Cloudflare)", () => {
     expect(buildCloudflareView([la], s2, av).records[0].target).toMatchObject({ kind: "server", assetId: "la" });
   });
 });
+
+describe("令牌权限判定（按权限组名末尾的访问级别）", () => {
+  it("Read / Reader at the end is read, even when the product name contains an action word", () => {
+    for (const n of ["Browser Run Read", "Workers Scripts Read", "Zone Read", "zone read", "ZONE READ ", "DNS Read (legacy)", "AI Gateway Read", "IP Prefixes: Read", "Cloud Email Security: Read", "Analytics Reader"])
+      expect(permissionLevel(n), n).toBe("read");
+  });
+  it("Edit / Write / explicit actions at the end are write", () => {
+    for (const n of ["DNS Edit", "dns edit", "Cache Purge", "Account Settings Write", "ACCOUNT SETTINGS WRITE", "Access: Apps Revoke", "AI Gateway Run", "Zone Edit (all zones)", "Magic Firewall Packet Captures - Write PCAPs API"])
+      expect(permissionLevel(n), n).toBe("write");
+  });
+  it("unrecognised names are unknown, not refused", () => {
+    expect(permissionLevel("Some Future Thing")).toBe("unknown");
+    expect(isWritePermission("Some Future Thing")).toBe(false);
+  });
+  it("every read group in Cloudflare's permission list (the 「Read all resources」 template) is read; every write group is write", async () => {
+    const { default: f } = await import("./fixtures/cf-permissions.json");
+    expect(f.read.length).toBeGreaterThan(100);
+    for (const n of f.read) expect(permissionLevel(n), n).toBe("read");
+    for (const n of f.write) expect(permissionLevel(n), n).toBe("write");
+  });
+});
+

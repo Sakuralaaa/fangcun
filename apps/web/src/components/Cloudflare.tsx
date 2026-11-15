@@ -1,6 +1,7 @@
 import {
   CF_SECTION_LABEL, CF_SECTIONS, checkHost, expectedForAtollHost, zoneToAssetInput,
   type AtollHostRef, type CfHostCheck, type CfRecordView, type CfSectionState,
+  isWritePermission, permissionLevel,
 } from "@fangcun/core";
 import clsx from "clsx";
 import { Check, Cloud, Lock, RefreshCw } from "lucide-react";
@@ -200,7 +201,7 @@ export function CloudflareServerCard({ asset, onSelect }: { asset: Asset; onSele
 // ---------------- settings ----------------
 
 const PERMS: [string, string, string][] = [
-  ["账户", "Account Settings · Read", "列出账户（设置了 CLOUDFLARE_ACCOUNT_ID 时可不勾）"],
+  ["账户", "Account Settings · Read", "列出账户（设了账户 ID 可不勾）"],
   ["区域", "Zone · Read", "列出 zone：状态、NS、套餐"],
   ["区域", "DNS · Read", "读 A / AAAA / CNAME 记录"],
   ["账户", "Registrar Domains · Read", "注册商：到期日、自动续费、转移锁"],
@@ -208,7 +209,7 @@ const PERMS: [string, string, string][] = [
   ["账户", "Workers Scripts · Read", "Workers 脚本与自定义域名"],
   ["账户", "Cloudflare Pages · Read", "Pages 项目与自定义域名"],
   ["账户", "Workers R2 Storage · Read", "R2 存储桶列表"],
-  ["用户", "API Tokens · Read（可选）", "让方寸核对令牌自身的权限；不勾则提示你自检"],
+  ["用户", "API Tokens · Read（可选）", "核对令牌自身的权限"],
 ];
 
 export function CloudflareSettings({ onSelect }: { onSelect?: (id: string) => void }) {
@@ -238,9 +239,11 @@ export function CloudflareSettings({ onSelect }: { onSelect?: (id: string) => vo
   const tok = cf?.token;
   const connected = Boolean(s.enabled && cf?.hasToken && !cf?.lastError && cf?.lastSync);
   const status = !s.enabled ? <span className="text-subtle">已关闭</span>
-    : connected ? <span className="flex items-center gap-1.5 text-ok"><span className="size-1.5 rounded-full bg-ok" />已连接{tok?.readOnly ? " · 只读令牌" : ""}</span>
-    : <span className="max-w-[380px] truncate text-muted" title={cf?.lastError ?? undefined}>{cf?.lastError || (!cf?.hasToken ? "缺少 API 令牌" : "还没同步过")}</span>;
+    : connected ? <span className="flex items-center gap-1.5 text-ok"><span className="size-1.5 rounded-full bg-ok" />已连接</span>
+    // the error itself is shown once, in 权限检查 below
+    : <span className="flex items-center gap-1.5 text-muted"><span className="size-1.5 rounded-full border border-subtle" />{cf?.lastError ? "未连接 · 原因见下方" : !cf?.hasToken ? "缺少 API 令牌" : "还没同步过"}</span>;
   const sections = cf?.sections ?? cfSnap?.sections ?? null;
+  const unknownPerms = (tok?.permissions ?? []).filter((p) => permissionLevel(p) === "unknown");
   const groups = [
     { label: "Tunnel", rows: cfView.tunnels.map((t) => ({ key: t.id, name: t.name, status: t.status, detail: [TUNNEL_STATUS[t.status] ?? t.status, t.connections ? `${t.connections} 条连接` : "", t.match.assetId ? `运行在 ${assets.find((a) => a.id === t.match.assetId)?.name}` : t.originIps.length ? `来源 ${t.originIps.join("、")}` : ""].filter(Boolean).join(" · "), domains: t.hostnames.map((h) => ({ hostname: h, domainAssetId: null as string | null })) })) },
     ...(["worker", "pages", "r2"] as const).map((k) => ({ label: SERVICE_KIND[k], rows: cfView.services.filter((x) => x.kind === k).map((x) => ({ key: x.kind + x.name, name: x.name, status: "", detail: x.detail ?? "", domains: x.domains })) })),
@@ -250,7 +253,6 @@ export function CloudflareSettings({ onSelect }: { onSelect?: (id: string) => vo
     <>
       <div>
         <h1 className="flex items-center gap-2.5 text-[22px] font-bold tracking-tight">Cloudflare <CfBadge /></h1>
-        <p className="mt-1 text-[13px] text-muted">只读读取 Cloudflare 的 zone、DNS 记录、注册商、Tunnel、Workers、Pages 和 R2，和方寸里的域名、VPS、Atoll 项目对上号。方寸不会改动 Cloudflare，也不会改你手填的资产数据。</p>
       </div>
       {demo && <p className="rounded-sm bg-field px-3 py-2 text-xs text-subtle">演示模式：这里的操作不会连接服务端。</p>}
 
@@ -273,15 +275,25 @@ export function CloudflareSettings({ onSelect }: { onSelect?: (id: string) => vo
       </Card>
 
       <Card title="权限检查" extra={tok ? <span>{tok.kind === "account" ? "账户令牌" : "用户令牌"} · {tok.status === "active" ? "有效" : tok.status}{tok.checkedAt ? ` · ${date(tok.checkedAt)}` : ""}</span> : undefined}>
-        {tok?.readOnly === false ? (
+        {tok?.readOnly !== false && cf?.lastError && s.enabled ? (
+          <p className="mb-3 rounded-sm border border-line bg-warn-soft px-3 py-2 text-[13px] leading-relaxed text-warn">{cf.lastError}</p>
+        ) : tok?.readOnly === false ? (
           <p className="mb-3 rounded-sm border border-line bg-warn-soft px-3 py-2 text-[13px] text-warn">
-            这个令牌不是只读（含 {(tok.permissions ?? []).filter((p) => /edit|write|purge|revoke|run|admin/i.test(p)).join("、")}），方寸已拒绝使用。请另建一个只勾 Read 的令牌，替换 CLOUDFLARE_API_TOKEN 后重启方寸。
+            这个令牌不是只读（含 {(tok.permissions ?? []).filter(isWritePermission).join("、")}），方寸已拒绝使用。请另建一个只勾 Read 的令牌，替换 CLOUDFLARE_API_TOKEN 后重建方寸容器（docker compose up -d --force-recreate）。
           </p>
         ) : tok?.readOnly ? (
-          <p className="mb-3 text-[13px] text-muted">令牌只读：读到 {tok.permissions?.length ?? 0} 项权限，全部是 Read。</p>
+          <>
+            <p className="mb-3 text-[13px] text-muted">只读 · {tok.permissions?.length ?? 0} 项权限</p>
+            {unknownPerms.length > 0 && (
+              <p className="mb-3 rounded-sm bg-field px-3 py-2 text-xs leading-relaxed text-muted">
+                无法判断，请自查：{unknownPerms.join("、")}
+              </p>
+            )}
+          </>
         ) : tok ? (
-          <p className="mb-3 text-[13px] text-muted">没能读到令牌自身的权限（令牌没勾 API Tokens · Read），方寸照常只发 GET 请求。请在 Cloudflare 里自行确认它只勾了 Read。</p>
-        ) : <p className="mb-3 text-[13px] text-subtle">同步一次后显示令牌状态与各项权限。</p>}
+          <p className="mb-3 text-[13px] text-muted">未能读取令牌权限（未勾 API Tokens · Read），请自行确认只勾了 Read。</p>
+        ) : <p className="mb-3 text-[13px] text-subtle">还没同步过</p>}
+        {sections ? <>
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-line bg-line @xl:grid-cols-4 [&>*]:bg-panel">
           {CF_SECTIONS.map((k) => {
             const st = sections?.[k];
@@ -296,7 +308,7 @@ export function CloudflareSettings({ onSelect }: { onSelect?: (id: string) => vo
             );
           })}
         </div>
-        <p className="mt-2.5 text-xs text-subtle">缺权限的项只显示「未授权」，不影响其他项。</p>
+        </> : null}
       </Card>
 
       <Card title="可导入为域名资产" extra={cfSnap ? `${cfView.importable.length} 个 zone 在方寸里还没有对应资产` : undefined} flush scroll className="max-h-[300px]">
@@ -310,7 +322,7 @@ export function CloudflareSettings({ onSelect }: { onSelect?: (id: string) => vo
         )) : <Empty>{cfSnap ? "每个 zone 都已有对应的域名资产。" : "同步一次后列出没有对应资产的 zone。"}</Empty>}
       </Card>
 
-      <Card title="账号下的服务" extra={groups.length ? "Tunnel、Workers、Pages、R2 只显示，不建资产" : undefined} flush scroll className="max-h-[360px]">
+      <Card title="账号下的服务" extra={groups.length ? `${groups.reduce((n, g) => n + g.rows.length, 0)} 项` : undefined} flush scroll className="max-h-[360px]">
         {groups.length ? groups.map((g) => (
           <div key={g.label}>
             <div className="flex h-8 items-center border-t border-line bg-field/50 px-4 text-xs font-medium whitespace-nowrap text-muted first:border-t-0">{g.label}<span className="ml-1.5 font-normal text-subtle">{g.rows.length}</span></div>
@@ -327,13 +339,10 @@ export function CloudflareSettings({ onSelect }: { onSelect?: (id: string) => vo
               </div>
             ))}
           </div>
-        )) : <Empty>{cfSnap ? "账号下没有 Tunnel、Workers、Pages 或 R2（或令牌没有对应读取权限）。" : "同步一次后显示。"}</Empty>}
+        )) : <Empty>{cfSnap ? "没有 Tunnel、Workers、Pages 或 R2" : "还没同步过"}</Empty>}
       </Card>
 
-      <Card title="创建令牌时勾选的权限" flush>
-        <div className="px-4 pb-2 text-xs leading-relaxed [overflow-wrap:anywhere] text-subtle">
-          Cloudflare 面板 → 右上角头像「我的个人资料」→「API 令牌」→「创建令牌」→「创建自定义令牌」。全部选 <b className="font-semibold whitespace-nowrap text-muted">Read（读取）</b>，任何 Edit 都不要勾；区域资源选「所有区域」或指定区域。令牌只放在服务端环境变量 CLOUDFLARE_API_TOKEN，不进数据库、不发给浏览器、不写日志。
-        </div>
+      <Card title="令牌需要的权限（全部 Read）" flush>
         {PERMS.map(([scope, name, use]) => (
           <div key={name} className="grid min-h-9 grid-cols-[40px_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 border-t border-line px-4 py-1.5 text-[13px] @xl:grid-cols-[56px_minmax(0,1.1fr)_minmax(0,1.4fr)]">
             <span className="text-xs whitespace-nowrap text-subtle">{scope}</span>
@@ -341,10 +350,6 @@ export function CloudflareSettings({ onSelect }: { onSelect?: (id: string) => vo
             <span className="text-xs text-muted @max-xl:col-start-2 @xl:truncate" title={use}>{use}</span>
           </div>
         ))}
-        <div className="border-t border-line px-4 py-3 text-xs leading-relaxed [overflow-wrap:anywhere] text-subtle">
-          方寸只会请求 GET /user/tokens/verify、/accounts、/zones、/zones/&#123;id&#125;/dns_records、注册商列表、/cfd_tunnel（含配置与连接）、/workers/scripts、/workers/domains、/pages/projects、/r2/buckets，代码里拒绝其他方法、路径和查询参数。
-          关联只是即时算出来的视图：zone ↔ 域名资产按域名匹配；A / AAAA 记录按公网 IP 对应唯一的 VPS（一个 IP 写在多台机器上就不猜）；CNAME 指向 *.cfargotunnel.com 的记录对应到 Tunnel，再按 Tunnel 连接的来源 IP 对应 VPS。
-        </div>
       </Card>
     </>
   );

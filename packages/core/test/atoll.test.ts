@@ -6,7 +6,7 @@ import {
 
 const T = "2026-11-15T00:00:00.000Z";
 const mk = (s: Partial<Asset> & Pick<Asset, "id" | "type" | "name">): Asset => ({
-  price: 0, currency: "USD", cycle: "month", autoRenew: false, tags: [], details: [], related: [], renewals: [], createdAt: T, updatedAt: T, ...s,
+  price: 0, currency: "USD", cycle: "month", autoRenew: false, tags: [], details: [], related: [], renewals: [], starred: false, pinned: false, createdAt: T, updatedAt: T, ...s,
 });
 const srv = (id: string, v4?: string, v6?: string): AtollServer => ({ id, name: id, status: "online", public_ipv4: v4, public_ipv6: v6 });
 

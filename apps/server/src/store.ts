@@ -1,5 +1,5 @@
 import {
-  actorLabel, decide, diffAssets, markOverrides, mergeSettings, newId, normalizeAsset, publicAsset,
+  actorLabel, decide, diffAssets, focusPatch, markOverrides, mergeSettings, newId, normalizeAsset, publicAsset,
   type Actor, type Asset, type AssetInput, type AuditEntry, type Changeset, type Op, type Settings,
 } from "@fangcun/core";
 import { tx, type DB } from "./db";
@@ -92,7 +92,7 @@ export class Store {
   }
   updateOp(id: string, patch: Partial<Asset>): Op {
     const before = this.mustGet(id);
-    const merged = { ...before, ...patch, id, type: patch.type ?? before.type } as Asset;
+    const merged = { ...before, ...focusPatch(patch), id, type: patch.type ?? before.type } as Asset;
     const after = this.prepare(merged, before);
     return { op: "put", id, before, after };
   }
@@ -267,7 +267,7 @@ export class Store {
   }
 }
 
-const VERB: Record<string, string> = { create: "新建", update: "修改", delete: "删除（进回收站）", purge: "永久删除", renew: "标记已续费", undo: "撤销", "komari-sync": "Komari 同步", import: "导入", restore: "从回收站恢复", tag: "改标签", link: "改关联" };
+const VERB: Record<string, string> = { create: "新建", update: "修改", delete: "删除（进回收站）", purge: "永久删除", renew: "标记已续费", undo: "撤销", "komari-sync": "Komari 同步", focus: "改关注", import: "导入", restore: "从回收站恢复", tag: "改标签", link: "改关联" };
 
 function opSummary(action: string, before: Asset | null, after: Asset | null, summary: string): string {
   const name = (after ?? before)?.name ?? "";

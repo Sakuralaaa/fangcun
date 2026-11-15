@@ -1,11 +1,11 @@
-import { displayTotal, isBilled, monthlyByCurrency, money, trafficUsed, TYPE_LABEL } from "@fangcun/core";
+import { compareStarred, displayTotal, isBilled, monthlyByCurrency, money, trafficUsed, TYPE_LABEL } from "@fangcun/core";
 import clsx from "clsx";
-import { AlertTriangle, ArrowUpRight, Plus } from "lucide-react";
-import type { AssetType } from "../data/types";
-import { daysUntil, dueLabel, getToday, md, monthlyDisplay, perCycle, urgency } from "../lib/fmt";
+import { AlertTriangle, ArrowUpRight, Pin, Plus, Star } from "lucide-react";
+import type { Asset, AssetType } from "../data/types";
+import { dateLabel, daysUntil, dueLabel, getToday, monthlyDisplay, perCycle, urgency } from "../lib/fmt";
 import { useData, useLiveStatus } from "../lib/store";
 import { hhmm, pctOf } from "./NodeStatus";
-import { Button, Card, KomariBadge, Pill, TypeIcon, typeMeta, urgencyText } from "./ui";
+import { Button, Card, FocusMark, KomariBadge, Pill, TypeIcon, typeMeta, urgencyText } from "./ui";
 
 const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -34,10 +34,11 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
   const hello = demo ? "上午好" : hour < 6 ? "夜深了" : hour < 11 ? "上午好" : hour < 13 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
   const unconverted = Object.entries(total.unconverted).map(([c, v]) => money(Math.round(v), c)).join(" + ");
   const cards = assets.filter((a) => a.type === "payment");
+  const starred = assets.filter((a) => a.starred).sort((a, b) => compareStarred(a, b, today));
 
   return (
     <main className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-5 px-8 py-7 max-md:px-4 max-md:py-4">
+      <div className="page flex flex-col gap-5">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div>
             <p className="text-[13px] text-subtle">{d.getMonth() + 1} 月 {d.getDate()} 日 · 星期{WEEK[d.getDay()]}</p>
@@ -62,6 +63,19 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
           <Kpi label="探针节点" value={servers.length ? `${online}/${servers.length}` : "—"} foot={servers.length ? `${servers.length - online} 台离线 · ${hhmm(statusAt ?? komari?.lastSync)} 更新` : komari?.url ? "还没有绑定节点" : "未连接 Komari"} badge />
         </div>
 
+        {starred.length ? (
+          <Card title={<span className="flex items-center gap-1.5">关注</span>} extra={<button onClick={() => onNav("/assets?type=starred")} className="flex items-center gap-1 hover:text-ink">{starred.length} 项 · 全部<ArrowUpRight size={12} /></button>}
+            flush scroll className="max-h-[262px]">
+            <div className="-mb-px grid @4xl:grid-cols-2">
+              {starred.map((a, i) => <StarredRow key={a.id} a={a} odd={i % 2 === 1} online={a.komari ? status[a.komari.uuid]?.online : undefined} onClick={() => onSelect(a.id)} />)}
+            </div>
+          </Card>
+        ) : (
+          <p className="flex items-center gap-2 rounded-md border border-dashed border-line px-4 py-2.5 text-[13px] text-subtle">
+            <Star size={14} strokeWidth={1.9} className="shrink-0" />在资产列表里点星标关注重要的资产，它们的到期、费用和在线状态会集中显示在这里。
+          </p>
+        )}
+
         <div className="grid gap-4 @4xl:h-[500px] @4xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <Card title="即将到期" extra="未来 45 天" flush scroll className="min-h-0 max-h-[500px]">
             {upcoming.length ? upcoming.map((a) => {
@@ -74,7 +88,7 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
                   </div>
                   <TypeIcon type={a.type} size="sm" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold">{a.name}</div>
+                    <div className="flex min-w-0 items-center gap-1.5"><span className="truncate font-semibold">{a.name}</span><FocusMark starred={a.starred} pinned={a.pinned} /></div>
                     <div className="truncate text-xs text-subtle">{typeMeta[a.type].label} · {a.payment ? `${a.payment.network ?? ""} ···· ${a.payment.last4} 卡片到期` : `${a.provider ?? ""} · ${perCycle(a)}`}</div>
                   </div>
                   {a.autoRenew ? <span className="shrink-0 text-xs whitespace-nowrap text-subtle @max-md:hidden">自动续费</span> : <span className="shrink-0 rounded-[5px] border border-line px-1.5 py-px text-[11px] whitespace-nowrap text-muted @max-md:hidden">{a.type === "payment" ? "需换卡" : "手动续费"}</span>}
@@ -132,7 +146,7 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
                         <div className="mt-1 h-1 overflow-hidden rounded-full bg-field"><div className={clsx("h-full rounded-full", pct >= 90 ? "bg-crit" : pct >= 75 ? "bg-warn" : "bg-accent")} style={{ width: `${pct}%` }} /></div>
                       </div>
                     )}
-                    <span className={clsx("w-12 shrink-0 text-right text-xs whitespace-nowrap tnum", urgencyText[urgency(s)])}>{s.expiresAt ? md(s.expiresAt) : "—"}</span>
+                    <span className={clsx("min-w-12 shrink-0 text-right text-xs whitespace-nowrap tnum", urgencyText[urgency(s)])}>{s.expiresAt ? dateLabel(s.expiresAt) : "—"}</span>
                   </button>
                 );
               }) : <p className="px-4 pb-4 text-[13px] text-subtle">{komari?.url ? "在设置里把 Komari 节点绑定到服务器资产后，这里会显示运行状态。" : "在设置里填上 Komari 探针地址，服务器的在线状态和流量会显示在这里。"}</p>}
@@ -141,6 +155,33 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
         </div>
       </div>
     </main>
+  );
+}
+
+/** One 关注 row: name, what it is, the one status that matters (online for a probed VPS), cost, and when it is next due. */
+function StarredRow({ a, odd, online, onClick }: { a: Asset; odd: boolean; online?: boolean; onClick: () => void }) {
+  const u = urgency(a);
+  const d = daysUntil(a.expiresAt);
+  const due = a.payment ? "卡片到期" : a.autoRenew ? "下次扣费" : "下次续费";
+  return (
+    <button onClick={onClick} className={clsx("flex h-[60px] w-full min-w-0 items-center gap-3 border-b border-line px-4 text-left hover:bg-field/60", odd && "@4xl:border-l")}>
+      <TypeIcon type={a.type} size="sm" />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={clsx("truncate font-semibold", a.type === "server" && "font-mono text-[12.5px]")}>{a.name}</span>
+          {a.pinned && <Pin size={11} strokeWidth={2} className="shrink-0 text-subtle" aria-label="置顶" />}
+        </div>
+        <div className="flex min-w-0 items-center gap-1.5 truncate text-xs text-subtle">
+          {a.komari && <span className={clsx("inline-flex shrink-0 items-center gap-1", online ? "text-ok" : "text-subtle")}><span className={clsx("size-1.5 rounded-full", online ? "bg-ok" : "bg-subtle")} />{online ? "在线" : "离线"}</span>}
+          {a.komari && <span className="shrink-0">·</span>}
+          <span className="truncate">{a.price > 0 ? perCycle(a) : typeMeta[a.type].label}</span>
+        </div>
+      </div>
+      <div className="shrink-0 text-right leading-tight">
+        <div className={clsx("text-[12.5px] whitespace-nowrap tnum", u === "crit" || u === "warn" ? "font-semibold" : "", urgencyText[u])}>{d === Infinity ? "长期" : d < 0 ? dueLabel(a) : dateLabel(a.expiresAt!)}</div>
+        <div className="mt-0.5 text-[11px] whitespace-nowrap text-subtle">{d === Infinity ? "无到期日" : d < 0 ? due : `${due} · ${dueLabel(a)}`}</div>
+      </div>
+    </button>
   );
 }
 

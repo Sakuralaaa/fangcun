@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assertCloudflareAllowed, CloudflareService } from "../src/cloudflare";
+import { cleanId, cleanSecret, cloudflareTokenHint } from "../src/secrets";
 import { openDb } from "../src/db";
 import { Store } from "../src/store";
 
@@ -41,7 +42,7 @@ describe("Cloudflare read-only whitelist", () => {
   });
 });
 
-type Opts = { perms?: string[] | null; verify?: "user" | "account" | "invalid"; deny?: RegExp[]; registrarLegacy?: boolean; accountId?: string };
+type Opts = { rawToken?: string; expectToken?: string; perms?: string[] | null; verify?: "user" | "account" | "invalid"; deny?: RegExp[]; registrarLegacy?: boolean; accountId?: string };
 const env = (result: unknown, info?: object) => Response.json({ success: true, errors: [], messages: [], result, ...(info ? { result_info: info } : {}) });
 const err = (status: number, code: number) => Response.json({ success: false, errors: [{ code, message: "Unauthorized to access requested resource" }], result: null }, { status });
 
@@ -54,7 +55,7 @@ function setup(o: Opts = {}) {
     const q = u.searchParams;
     calls.push(`${init.method} ${p}${u.search}`);
     expect(u.origin).toBe("https://api.cloudflare.com");
-    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer cf-test-token");
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${o.expectToken ?? "cf-test-token"}`);
     expect(init.body).toBeUndefined();
     if (o.deny?.some((re) => re.test(p))) return err(403, 9109);
     if (p === "/user/tokens/verify") return o.verify === "account" || o.verify === "invalid" ? err(401, 1000) : env({ id: TOK, status: "active" });
@@ -92,7 +93,7 @@ function setup(o: Opts = {}) {
     if (p === `/accounts/${ACC}/r2/buckets`) return env({ buckets: [{ name: "assets", location: "APAC", creation_date: "2026-01-02T00:00:00Z" }] }, { cursor: "" });
     return new Response("no", { status: 404 });
   }) as unknown as typeof fetch;
-  return { store, calls, cf: new CloudflareService(store, "cf-test-token", o.accountId ?? "", fetchImpl) };
+  return { store, calls, cf: new CloudflareService(store, o.rawToken ?? "cf-test-token", o.accountId ?? "", fetchImpl) };
 }
 
 describe("CloudflareService.sync", () => {
@@ -167,3 +168,55 @@ describe("CloudflareService.sync", () => {
     expect(calls.length).toBe(n);
   });
 });
+
+describe("环境变量里的密钥清洗与 401 诊断", () => {
+  it("strips whitespace, newlines, wrapping quotes and a pasted Bearer prefix", () => {
+    expect(cleanSecret("  abc123\n").value).toBe("abc123");
+    expect(cleanSecret('"abc123"').value).toBe("abc123");
+    expect(cleanSecret("'abc123'").value).toBe("abc123");
+    expect(cleanSecret(' "Bearer abc123" \r\n')).toEqual({ value: "abc123", stripped: ["首尾空白/换行", "包裹的引号", "Bearer 前缀"] });
+    expect(cleanSecret("bearer   abc").value).toBe("abc");
+    expect(cleanSecret('"abc').value).toBe('"abc'); // unpaired quote is left alone
+    expect(cleanSecret(undefined).value).toBe("");
+    expect(cleanId(' "0123ABCD" ')).toBe("0123abcd");
+  });
+
+  it("the Cloudflare client sends the cleaned token (docker-compose list form keeps the quotes)", async () => {
+    const { cf } = setup({ rawToken: '"Bearer cf-test-token"\n' });
+    await expect(cf.sync()).resolves.toBeTruthy();
+  });
+
+  it("token hint shows at most five characters", () => {
+    const acc = "cfat_" + "x".repeat(48);
+    expect(cloudflareTokenHint(acc)).toMatchObject({ prefix: "cfat_", kind: "account", odd: null });
+    expect(cloudflareTokenHint("cfut_" + "y".repeat(48)).kind).toBe("user");
+    expect(cloudflareTokenHint("A".repeat(40)).kind).toBe("legacy");
+    expect(cloudflareTokenHint("short").odd).toMatch(/长度只有 5/);
+    expect(cloudflareTokenHint("abc def ghi jkl mno pqr stu vwx yz").odd).toMatch(/空白/);
+  });
+
+  it("401 message: kind from the prefix, never more than 5 characters, cfat_ needs the account id, IP filter, recreate the container", async () => {
+    const tok = "cfat_SECRETPART0123456789abcdefghijklmnopqrstuv";
+    const { cf } = setup({ rawToken: `"${tok}"`, expectToken: tok, verify: "invalid" });
+    const msg = await cf.sync().then(() => "", (e: Error) => e.message);
+    expect(msg).toContain("401");
+    expect(msg).toContain("cfat_…（账户令牌");
+    expect(msg).not.toContain("cfat_S");
+    expect(msg).not.toContain("SECRETPART");
+    expect(msg).toContain("包裹的引号");
+    expect(msg).toContain("CLOUDFLARE_ACCOUNT_ID");
+    expect(msg).toContain("客户端 IP 地址筛选");
+    expect(msg).toContain("--force-recreate");
+    const withAcc = setup({ rawToken: tok, expectToken: tok, verify: "invalid", accountId: ACC });
+    const msg2 = await withAcc.cf.sync().then(() => "", (e: Error) => e.message);
+    expect(msg2).not.toContain("必须同时设置 CLOUDFLARE_ACCOUNT_ID");
+    expect(msg2).not.toContain("已自动去掉");
+  });
+
+  it("a read-all token (Browser Run Read …) is accepted as read-only", async () => {
+    const { cf } = setup({ perms: ["Browser Run Read", "Workers Scripts Read", "Zone Read", "DNS Read", "Zero Trust Report"] });
+    await cf.sync();
+    expect(cf.state.token).toMatchObject({ readOnly: true });
+  });
+});
+

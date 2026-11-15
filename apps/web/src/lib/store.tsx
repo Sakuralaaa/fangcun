@@ -1,4 +1,4 @@
-import { buildAtollView, buildCloudflareView, DEFAULT_SETTINGS, normalizeAsset, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type CfSection, type CfSectionState, type CfSnapshot, type CfView, type PingState, type Settings } from "@fangcun/core";
+import { buildAtollView, buildCloudflareView, DEFAULT_SETTINGS, focusPatch, normalizeAsset, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type CfSection, type CfSectionState, type CfSnapshot, type CfView, type PingState, type Settings } from "@fangcun/core";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { demoAssets, demoAtollInfo, demoAtollSnapshot, demoCfInfo, demoCfSnapshot, demoKomariInfo, demoSettings, demoStatus, DEMO_TODAY } from "../data/mock";
 import type { Asset, StatusMap } from "../data/types";
@@ -50,6 +50,8 @@ interface Ctx {
   create: (a: Partial<Asset>) => Promise<Asset | null>;
   update: (id: string, patch: Partial<Asset>) => Promise<Asset | null>;
   renew: (id: string, opts?: { amount?: number; note?: string }) => Promise<void>;
+  /** 关注 / 置顶 one asset. 取消关注 also 取消置顶; 置顶 also 关注. */
+  setFocus: (id: string, f: { starred?: boolean; pinned?: boolean }) => Promise<void>;
   remove: (id: string) => Promise<void>;
   restoreField: (id: string, key: string) => Promise<void>;
   saveSettings: (s: Settings) => Promise<void>;
@@ -168,7 +170,7 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   const update = useCallback(async (id: string, patch: Partial<Asset>) => {
     if (demo) {
       const before = assets.find((a) => a.id === id)!;
-      return demoPut(markOverrides(before, normalizeAsset({ ...before, ...patch } as Asset), demoSettings.komari) as Asset);
+      return demoPut(markOverrides(before, normalizeAsset({ ...before, ...focusPatch(patch) } as Asset), demoSettings.komari) as Asset);
     }
     return applyResult(await api<WriteResult>("PATCH", `/api/assets/${encodeURIComponent(id)}`, patch));
   }, [demo, assets, applyResult]);
@@ -177,6 +179,14 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
     if (demo) { demoPut(renewAsset(assets.find((a) => a.id === id)!, getToday(), opts)); toast("已标记续费"); return; }
     const r = applyResult(await post<WriteResult>(`/api/assets/${encodeURIComponent(id)}/renew`, opts));
     if (r) toast(`已续费，下次到期 ${r.expiresAt ?? "长期"}`);
+  }, [demo, assets, applyResult, toast]);
+
+  const setFocus = useCallback(async (id: string, f: { starred?: boolean; pinned?: boolean }) => {
+    const before = assets.find((a) => a.id === id);
+    if (demo) { if (before) demoPut(normalizeAsset({ ...before, ...focusPatch(f) } as Asset) as Asset); return; }
+    try {
+      applyResult(await post<WriteResult>(`/api/assets/${encodeURIComponent(id)}/focus`, f));
+    } catch (e) { toast((e as Error).message, "err"); }
   }, [demo, assets, applyResult, toast]);
 
   const remove = useCallback(async (id: string) => {
@@ -204,8 +214,8 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
 
   const value = useMemo<Ctx>(() => ({
     demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, loading, backupError, reload, refreshStatus,
-    create, update, renew, remove, restoreField, saveSettings, toast, setMe,
-  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, loading, backupError, reload, refreshStatus, create, update, renew, remove, restoreField, saveSettings, toast]);
+    create, update, renew, setFocus, remove, restoreField, saveSettings, toast, setMe,
+  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, loading, backupError, reload, refreshStatus, create, update, renew, setFocus, remove, restoreField, saveSettings, toast]);
 
   return (
     <C.Provider value={value}>

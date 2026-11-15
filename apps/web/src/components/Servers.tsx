@@ -9,7 +9,7 @@ import { useAtollOn } from "./Atoll";
 import { hhmm } from "./NodeStatus";
 import { bandwidthLabel, bytes, bytesParts, DotTrend, Flag, LatencyBars, latencyText, lossText, nodeOs, nodeRegion, Num, OsMark, pctLabel, SegBar, speedParts, speedText, usageText, usageTone } from "./probe";
 import { Chip, EMPTY_BUCKETS, ExpiryValue, LifeCells, Meters, nodeView, PingCells, QuotaRow, SpeedCell, TotalCell, type NodeView } from "./probeBlocks";
-import { KomariBadge, urgencyText } from "./ui";
+import { FocusMark, KomariBadge, urgencyText } from "./ui";
 
 type View = "large" | "compact" | "list";
 const VIEW_KEY = "fc-servers-view";
@@ -35,7 +35,8 @@ export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
   const st = (a: Asset) => (a.komari ? status[a.komari.uuid] : undefined);
 
   const servers = assets.filter((a) => a.type === "server")
-    .sort((a, b) => Number(!!st(b)?.online) - Number(!!st(a)?.online) || daysUntil(a.expiresAt) - daysUntil(b.expiresAt));
+    // 关注 first (置顶 before other starred), then online, then by expiry
+    .sort((a, b) => Number(b.starred) - Number(a.starred) || Number(b.pinned) - Number(a.pinned) || Number(!!st(b)?.online) - Number(!!st(a)?.online) || daysUntil(a.expiresAt) - daysUntil(b.expiresAt));
 
   // Tabs: Komari groups when any node has one, otherwise 方寸 tags.
   const byGroup = servers.some((a) => st(a)?.group);
@@ -68,7 +69,7 @@ export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5 px-4 py-5 sm:px-8 sm:py-7">
+      <div className="page flex flex-col gap-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-[24px] font-bold tracking-tight">服务器</h1>
@@ -167,7 +168,10 @@ function Head({ a, s, v, group, extra, small }: { a: Asset; s?: NodeStatus; v: N
     <>
       <div className="flex items-center gap-2.5">
         <Flag region={nodeRegion(a, s)} />
-        <span className={clsx("min-w-0 flex-1 truncate font-semibold tracking-tight", small ? "text-[14px]" : "text-[15.5px]")} title={a.subtitle ? `${a.name} · ${a.subtitle}` : a.name}>{a.name}</span>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className={clsx("min-w-0 truncate font-semibold tracking-tight", small ? "text-[14px]" : "text-[15.5px]")} title={a.subtitle ? `${a.name} · ${a.subtitle}` : a.name}>{a.name}</span>
+          <FocusMark starred={a.starred} pinned={a.pinned} size={small ? 12 : 13} />
+        </span>
         <OsMark os={nodeOs(a, s)} className={small ? "size-7" : undefined} />
       </div>
       <div className="mt-2 flex h-5 min-w-0 items-center gap-1.5 overflow-hidden">
@@ -263,7 +267,7 @@ function ListView({ servers, st, showPing, onSelect }: { servers: Asset[]; st: (
           );
           return (
             <button key={a.id} onClick={() => onSelect(a.id)} className={clsx("grid h-14 w-full items-center gap-4 border-b border-line px-4 text-left text-[13px] last:border-0 hover:bg-field/60", cols, !v.on && "opacity-60")}>
-              <span className="flex min-w-0 items-center gap-2"><Flag region={nodeRegion(a, s)} /><span className="truncate font-semibold">{a.name}</span></span>
+              <span className="flex min-w-0 items-center gap-2"><Flag region={nodeRegion(a, s)} /><span className="truncate font-semibold">{a.name}</span><FocusMark starred={a.starred} pinned={a.pinned} /></span>
               {m(v.cpu, "bg-p-cpu")}{m(v.mem, "bg-p-mem")}{m(v.disk, "bg-p-disk")}
               <span className="truncate text-[12px] text-muted tnum">{v.on && s ? <>↑ {speedText(s.up)}<br />↓ {speedText(s.down)}</> : "—"}</span>
               {showPing && (

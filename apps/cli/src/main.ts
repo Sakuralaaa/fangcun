@@ -14,7 +14,8 @@ const HELP = `方寸 Fangcun CLI ${APP_VERSION}
   whoami                               查看当前令牌与权限
 
 查询（只读令牌即可）
-  ls [--type server] [--tag x] [--due 30]   列出资产，按到期排序
+  ls [--type server] [--tag x] [--due 30] [--starred]
+                                       列出资产：置顶在前，其次按到期排序；--starred 只看关注
   show <id|名称>                       查看一项
   search <关键词>                      搜索名称、IP、标签、末四位…
   doctor                               检查缺字段、重复、过期未处理、无关联
@@ -29,6 +30,8 @@ const HELP = `方寸 Fangcun CLI ${APP_VERSION}
   tag <id> +标签 -标签
   link <id> <其他id...> [--unlink]
   renew <id> [--amount 24] [--note 手动续费]
+  star <id> / unstar <id>              关注 / 取消关注（取消关注同时取消置顶）
+  pin <id> / unpin <id>                置顶 / 取消置顶（置顶同时关注）
   rm <id>                              删除到回收站（30 天内可恢复）
   import <file.csv|file.json>
   undo <日志编号>
@@ -58,7 +61,7 @@ async function main(argv: string[]) {
       "auto-renew": { type: "boolean" }, set: { type: "string", multiple: true }, amount: { type: "string" },
       unlink: { type: "boolean" }, format: { type: "string" }, output: { type: "string", short: "o" },
       "dry-run": { type: "boolean" }, mode: { type: "string" }, asset: { type: "string" }, limit: { type: "string" },
-      prefer: { type: "string" },
+      prefer: { type: "string" }, starred: { type: "boolean" },
     },
   });
   const [cmd, ...args] = positionals;
@@ -84,7 +87,7 @@ async function main(argv: string[]) {
       return out(s.token ? `令牌「${s.token.name}」· ${SCOPE_LABEL[s.token.scope as "read"]} · 服务端 ${s.version}` : "未识别的令牌", s);
     }
     case "ls": case "list": {
-      const list = await ops.list(client, { type: normType(str("type")), tag: str("tag"), due: str("due") ? Number(str("due")) : undefined, deleted: Boolean(o.deleted) });
+      const list = await ops.list(client, { type: normType(str("type")), tag: str("tag"), due: str("due") ? Number(str("due")) : undefined, deleted: Boolean(o.deleted), starred: Boolean(o.starred) });
       return out(assetRows(list), list);
     }
     case "search": {
@@ -130,6 +133,12 @@ async function main(argv: string[]) {
     case "renew": {
       need(args[0], "renew <id>");
       const r = await ops.renew(client, args[0], { ...(str("amount") ? { amount: Number(str("amount")) } : {}), ...(str("note") ? { note: str("note") } : {}) });
+      return out(writeResult(r), r);
+    }
+    case "star": case "unstar": case "pin": case "unpin": {
+      need(args[0], `${cmd} <id>`);
+      const f = cmd === "star" ? { starred: true } : cmd === "unstar" ? { starred: false } : cmd === "pin" ? { pinned: true } : { pinned: false };
+      const r = await ops.focus(client, args[0], f);
       return out(writeResult(r), r);
     }
     case "rm": case "delete": {

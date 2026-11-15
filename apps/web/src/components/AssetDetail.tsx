@@ -1,17 +1,17 @@
 import { CARD_STATUS_LABEL, formatKomariValue, monthsHeld, nextExpiry, paidSoFar, yearlyCost } from "@fangcun/core";
 import clsx from "clsx";
-import { Check, ChevronLeft, Download, ExternalLink, FileUp, Globe, Lock, Pencil, Trash2, Undo2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { Check, ChevronLeft, Download, ExternalLink, FileUp, Globe, Lock, Pencil, Pin, PinOff, Trash2, Undo2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../data/types";
 import { api } from "../lib/api";
-import { cycleLabel, daysUntil, dueLabel, getToday, money, urgency, ymd } from "../lib/fmt";
+import { cycleLabel, dateLabel, daysUntil, dueLabel, getToday, money, urgency, ymd } from "../lib/fmt";
 import { useData } from "../lib/store";
 import { AtollDomainCard, AtollImpact, AtollProjectsCard } from "./Atoll";
 import { CloudflareDomainCard, CloudflareServerCard } from "./Cloudflare";
 import { NodeStatusCard } from "./NodeStatus";
 import { QuotaCard } from "./Quota";
 import { TeamCard } from "./Team";
-import { Button, Card, Empty, Field, KomariBadge, Modal, Pill, TextInput, TypeIcon, urgencyText } from "./ui";
+import { Button, Card, Empty, Field, KomariBadge, Modal, MoreMenu, Pill, StarButton, TextInput, TypeIcon, urgencyText } from "./ui";
 
 export type Mode = "web" | "desktop";
 
@@ -39,7 +39,7 @@ function detailRows(a: Asset): { label: string; value: string; mono?: boolean; s
 }
 
 export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: { asset: Asset; mode?: Mode; onSelect: (id: string) => void; onEdit: () => void; onBack?: () => void; className?: string }) {
-  const { assets, status, restoreField } = useData();
+  const { assets, status, restoreField, setFocus } = useData();
   const [renewing, setRenewing] = useState(false);
   const today = getToday();
   const u = urgency(a);
@@ -51,19 +51,24 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
   const backlinks = assets.filter((x) => x.id !== a.id && !a.related.includes(x.id) && (x.related.includes(a.id) || x.accountId === a.id));
   const links = [...related, ...backlinks];
   const rows = detailRows(a);
-  const hasSide = Boolean(a.note || links.length);
+  // shared height of the 续费记录 | 备注 row: fits its content, between 220 and 320px
+  const rowH = Math.min(320, Math.max(220, 44 + Math.max(1, a.renewals.length) * 44 + 8, 44 + 112 + 16 + (links.length ? 16 + 44 + links.length * 48 : 0)));
   const isAccount = a.type === "account";
   const stat = a.komari ? status[a.komari.uuid] : undefined;
 
   return (
     <main className={clsx("flex min-w-0 flex-1 flex-col", className)}>
       <div className="@container flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-[1080px] flex-col gap-4 px-7 py-6 max-md:px-4 max-md:py-4">
+        <div className="page flex flex-col gap-4">
           {onBack && <button onClick={onBack} className="-mb-1 flex w-fit items-center gap-1 text-[13px] text-muted hover:text-ink lg:hidden"><ChevronLeft size={16} />资产</button>}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             <TypeIcon type={a.type} size="lg" />
             <div className="min-w-0 flex-1 basis-[220px]">
-              <h1 className={clsx("truncate text-[22px] font-bold tracking-tight", a.type === "server" && "font-mono text-[23px]")}>{a.name}</h1>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <h1 className={clsx("truncate text-[22px] font-bold tracking-tight", a.type === "server" && "font-mono text-[23px]")}>{a.name}</h1>
+                <StarButton on={a.starred} name={a.name} onToggle={() => setFocus(a.id, { starred: !a.starred })} size={17} className="size-8" />
+                {a.pinned && <span className="inline-flex h-[22px] shrink-0 items-center gap-1 rounded-[6px] bg-field px-1.5 text-[11.5px] whitespace-nowrap text-muted"><Pin size={11} strokeWidth={2} />置顶</span>}
+              </div>
               <p className="mt-0.5 truncate text-[13px] text-muted">{[a.subtitle, a.provider].filter(Boolean).join(" · ")}{a.tags.length > 0 && <span className="text-subtle"> · {a.tags.map((t) => `#${t}`).join("  ")}</span>}</p>
             </div>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -72,13 +77,16 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
               {a.payment && a.payment.status !== "active" && <Pill tone="none">{CARD_STATUS_LABEL[a.payment.status]}</Pill>}
               <Button icon={<Pencil size={14} />} onClick={onEdit}>编辑</Button>
               {!isAccount && a.cycle !== "once" && <Button variant="primary" icon={<Check size={15} />} onClick={() => setRenewing(true)}>标记已续费</Button>}
+              <MoreMenu items={[a.pinned
+                ? { label: "取消置顶", icon: <PinOff size={14} />, onSelect: () => setFocus(a.id, { pinned: false }) }
+                : { label: "置顶", icon: <Pin size={14} />, onSelect: () => setFocus(a.id, { pinned: true }) }]} />
             </div>
           </div>
 
           {!isAccount && (
             <div className="grid grid-cols-1 gap-3 @xl:grid-cols-3">
               <Stat label={a.type === "payment" ? "卡片有效期" : "下次续费"}
-                value={<span className={urgencyText[u]}>{a.expiresAt ? (d > 300 ? ymd(a.expiresAt) : ymd(a.expiresAt).slice(5)) : "—"}</span>}
+                value={<span className={urgencyText[u]}>{a.expiresAt ? dateLabel(a.expiresAt) : "—"}</span>}
                 foot={a.expiresAt ? `${d < 0 ? `已过期 ${-d} 天` : `还有 ${d} 天`}${a.autoRenew ? " · 自动续费" : ""}` : "长期有效"}
                 synced={Boolean(a.komari?.fields && "expiresAt" in a.komari.fields)}
                 override={ov.expiresAt && { text: formatKomariValue("expiresAt", ov.expiresAt.komari), changed: ov.expiresAt.changed, onRestore: () => restoreField(a.id, "expiresAt") }} />
@@ -86,7 +94,12 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
                 foot={[a.region, a.discount].filter(Boolean).join(" · ") || (a.price ? (a.cycle === "once" ? "一次性" : `一年约 ${money(yearlyCost(a), a.currency)}`) : "无需付费")}
                 synced={Boolean(a.komari?.fields && "price" in a.komari.fields)}
                 override={ov.price && { text: formatKomariValue("price", ov.price.komari, a.currency), changed: ov.price.changed, onRestore: () => restoreField(a.id, "price") }} />
-              <Stat label="已用" value={a.purchasedAt ? `${months} 个月` : "—"} foot={a.purchasedAt ? `${ymd(a.purchasedAt)} 购入${a.price ? ` · 累计约 ${money(paidSoFar(a, today), a.currency)}` : ""}` : "没填购入日期"} />
+              {a.purchasedAt
+                ? <Stat label="已用" value={`${months} 个月`} foot={`${ymd(a.purchasedAt)} 购入${a.price ? ` · 累计约 ${money(paidSoFar(a, today), a.currency)}` : ""}`} />
+                : paidTotal(a)
+                  ? <Stat label="累计续费" value={paidTotal(a)} foot={`${a.renewals.length} 次记录 · 最近 ${ymd(a.renewals[0].date)}`} />
+                  : <Stat label="续费方式" value={a.autoRenew ? "自动续费" : a.price ? "手动续费" : "免费"}
+                      foot={a.autoRenew ? "到期自动扣费，留意卡片余额" : a.price ? "到期前记得手动续费" : "无需付费"} />}
             </div>
           )}
 
@@ -104,15 +117,20 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
               <Card title="详细信息" extra={a.komari ? <><KomariBadge /> 标记的字段来自探针</> : undefined} flush scroll className="max-h-[360px]">
                 {rows.length ? (
                   <div className="-mb-px grid @lg:grid-cols-2">
-                    {rows.map((f, i) => (
+                    {rows.map((f, i) => {
+                      // an odd last field spans both columns, so no cell ends with half a divider
+                      const lastOdd = rows.length % 2 === 1 && i === rows.length - 1;
+                      return (
                       <div key={f.label + i} className={clsx("flex h-11 min-w-0 items-center justify-between gap-3 border-b border-line px-4 text-[13px]",
-                        i % 2 === 0 && "@lg:border-r")}>
+                        lastOdd ? "@lg:col-span-2" : i % 2 === 0 && "@lg:border-r")}>
                         <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-subtle">{f.label}{f.synced && <span className="size-1 rounded-full bg-accent" />}</span>
                         <span className={clsx("truncate", f.mono && !f.value.includes("@") && "font-mono text-[12.5px]")} title={f.value}>{f.value}</span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                ) : <Empty>还没有填写，点「编辑」补充 IP、配置、套餐等信息</Empty>}
+                ) : <Empty>还没有填写，点「编辑」补充{DETAIL_HINT[a.type]}等信息</Empty>}
+                {rows.length > 0 && rows.length < 4 && <p className="px-4 pt-3 pb-4 text-xs leading-relaxed text-subtle">只填了 {rows.length} 项。可以点「编辑」补充{DETAIL_HINT[a.type]}等信息。</p>}
               </Card>
             )}
             {account && !isAccount && <AccountCard account={account} compact onOpen={() => onSelect(account.id)} />}
@@ -120,8 +138,9 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
           </div>
 
           {!isAccount && (
-            <div className={clsx("grid gap-4", hasSide && "@3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]")}>
-              <Card title="续费记录" extra={`${a.renewals.length} 次`} flush scroll className="max-h-[320px]">
+            // 续费记录 | 备注 + 关联: one row, both columns share its height; the note's textarea fills what is left
+            <div className="grid gap-4 @3xl:h-[var(--row-h)] @3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]" style={{ "--row-h": `${rowH}px` } as React.CSSProperties}>
+              <Card title="续费记录" extra={`${a.renewals.length} 次`} flush scroll className="max-h-[320px] @3xl:max-h-none">
                 {a.renewals.length ? a.renewals.map((r, i) => (
                   <div key={r.date + i} className="flex h-11 shrink-0 items-center gap-4 border-b border-line px-4 text-[13px] last:border-0">
                     <span className="w-24 shrink-0 whitespace-nowrap text-subtle tnum">{ymd(r.date)}</span>
@@ -130,15 +149,13 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
                   </div>
                 )) : <Empty>还没有记录。点「标记已续费」会推进到期日并记一条。</Empty>}
               </Card>
-              {hasSide && (
-                <div className="flex min-h-0 flex-col gap-4 @3xl:max-h-[320px] @3xl:[&>*:last-child]:flex-1">
-                  {a.note && <Card title="备注" scroll className="shrink-0 max-h-[50%]"><p className="text-[13px] leading-relaxed whitespace-pre-wrap text-muted">{a.note}</p></Card>}
-                  {links.length > 0 && <LinkCard title={a.type === "payment" ? "用这张卡付款" : "关联"} links={links} onSelect={onSelect} />}
-                </div>
-              )}
+              <div className="flex min-h-0 flex-col gap-4">
+                <NoteCard a={a} className="flex-1" />
+                {links.length > 0 && <LinkCard title={a.type === "payment" ? "用这张卡付款" : "关联"} links={links} onSelect={onSelect} className="max-h-[calc(100%-172px)] shrink-0" />}
+              </div>
             </div>
           )}
-          {isAccount && a.note && <Card title="备注"><p className="text-[13px] leading-relaxed whitespace-pre-wrap text-muted">{a.note}</p></Card>}
+          {isAccount && <NoteCard a={a} />}
 
           {(a.type === "document" || (a.attachments?.length ?? 0) > 0) && <Attachments a={a} />}
         </div>
@@ -148,9 +165,42 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
   );
 }
 
-function LinkCard({ title, links, onSelect }: { title: string; links: Asset[]; onSelect: (id: string) => void }) {
+const DETAIL_HINT: Record<Asset["type"], string> = {
+  server: " IP、配置、系统", domain: " DNS、注册人、实名、转移锁", cert: "域名、签发者、部署位置", subscription: "套餐、席位、付款方式",
+  mail: "席位、域名、套餐", phone: "运营商、用途", payment: "卡组织、账单地区", account: "网站、用途", document: "编号、签署日期",
+};
+
+/** Sum of recorded renewals when they share one currency; empty string otherwise. */
+function paidTotal(a: Asset): string {
+  if (!a.renewals.length) return "";
+  const cur = a.renewals[0].currency ?? a.currency;
+  if (a.renewals.some((r) => (r.currency ?? a.currency) !== cur)) return `${a.renewals.length} 次`;
+  return money(Math.round(a.renewals.reduce((s, r) => s + r.amount, 0) * 100) / 100, cur);
+}
+
+/** 备注: always present, edited in place, saved when the field loses focus. Fills its card; at least ~4 lines. */
+function NoteCard({ a, className }: { a: Asset; className?: string }) {
+  const { update, toast } = useData();
+  const [v, setV] = useState(a.note ?? "");
+  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
+  useEffect(() => { setV(a.note ?? ""); setState("idle"); }, [a.id, a.note]);
+  const save = async () => {
+    if (v.trim() === (a.note ?? "").trim()) return;
+    setState("saving");
+    try { await update(a.id, { note: v }); setState("saved"); } catch (e) { toast((e as Error).message, "err"); setState("idle"); }
+  };
   return (
-    <Card title={title} extra={links.length} flush scroll className="min-h-0">
+    <Card title="备注" extra={state === "saving" ? "保存中…" : state === "saved" ? "已保存" : "离开输入框自动保存"} fill className={clsx("min-h-0", className)}>
+      <textarea value={v} onChange={(e) => { setV(e.target.value); setState("idle"); }} onBlur={save} aria-label={`「${a.name}」的备注`}
+        placeholder="记点什么：用途、续费方式、转移码放在哪…"
+        className="block min-h-[96px] w-full flex-1 resize-none rounded-sm border border-transparent bg-field px-3 py-2 text-[13px] leading-relaxed text-ink outline-none placeholder:text-subtle focus:border-ink/30" />
+    </Card>
+  );
+}
+
+function LinkCard({ title, links, onSelect, className }: { title: string; links: Asset[]; onSelect: (id: string) => void; className?: string }) {
+  return (
+    <Card title={title} extra={links.length} flush scroll className={clsx("min-h-0", className)}>
       {links.length ? links.map((r) => (
         <button key={r.id} onClick={() => onSelect(r.id)} className="flex h-12 w-full shrink-0 items-center gap-3 border-b border-line px-4 text-left last:border-0 hover:bg-field/60">
           <TypeIcon type={r.type} size="sm" />

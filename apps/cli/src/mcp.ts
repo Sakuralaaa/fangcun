@@ -15,7 +15,7 @@ const assetFields = {
   name: { type: "string" }, subtitle: { type: "string" }, provider: { type: "string" },
   price: { type: "number", description: "实付价，手填，不做汇率换算" }, currency: { type: "string", description: "USD / CNY / …" },
   cycle: { type: "string", enum: [...CYCLES] }, expiresAt: { type: "string", description: "YYYY-MM-DD" },
-  autoRenew: { type: "boolean" }, purchasedAt: { type: "string" }, region: { type: "string" }, discount: { type: "string" },
+  autoRenew: { type: "boolean" }, starred: { type: "boolean", description: "关注" }, pinned: { type: "boolean", description: "置顶（隐含关注）" }, purchasedAt: { type: "string" }, region: { type: "string" }, discount: { type: "string" },
   tags: { type: "array", items: { type: "string" } }, related: { type: "array", items: { type: "string" } },
   note: { type: "string" }, details: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" } } } },
   payment: { type: "object", description: "支付卡：issuer, network, last4（只存末四位，绝不传完整卡号/CVV）, cardExpiry(YYYY-MM), fees, billingRegion, status(active|frozen|closed)" },
@@ -24,8 +24,8 @@ const assetFields = {
 };
 
 export const TOOLS: Tool[] = [
-  { name: "list_assets", description: "列出资产，按到期日排序。可按类型、标签、N 天内到期筛选。", inputSchema: { type: "object", properties: { type: { type: "string", enum: [...ASSET_TYPES] }, tag: { type: "string" }, due_within_days: { type: "number" } } },
-    run: (c, a) => ops.list(c, { type: a.type, tag: a.tag, due: a.due_within_days }) },
+  { name: "list_assets", description: "列出资产：置顶在前，其次按到期日排序。可按类型、标签、N 天内到期、只看关注筛选。", inputSchema: { type: "object", properties: { type: { type: "string", enum: [...ASSET_TYPES] }, tag: { type: "string" }, due_within_days: { type: "number" }, starred_only: { type: "boolean", description: "只列出关注（含置顶）的资产" } } },
+    run: (c, a) => ops.list(c, { type: a.type, tag: a.tag, due: a.due_within_days, starred: a.starred_only }) },
   { name: "search_assets", description: "全文搜索资产（名称、IP、标签、邮箱、卡号末四位…）", inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
     run: (c, a) => ops.list(c, { q: a.query }) },
   { name: "get_asset", description: "查看一项资产的全部字段", inputSchema: { type: "object", properties: { id }, required: ["id"] }, run: (c, a) => ops.show(c, a.id) },
@@ -34,6 +34,8 @@ export const TOOLS: Tool[] = [
   { name: "tag_asset", description: "增删标签", inputSchema: { type: "object", properties: { id, add: { type: "array", items: { type: "string" } }, remove: { type: "array", items: { type: "string" } } }, required: ["id"] }, run: (c, a) => ops.tag(c, a.id, a.add ?? [], a.remove ?? []) },
   { name: "link_assets", description: "建立或取消双向关联（例如订阅 ↔ 付款用的支付卡）", inputSchema: { type: "object", properties: { id, to: { type: "array", items: { type: "string" } }, unlink: { type: "boolean" } }, required: ["id", "to"] }, run: (c, a) => ops.link(c, a.id, a.to, a.unlink) },
   { name: "renew_asset", description: "标记已续费：到期日推进一个周期并记一条续费记录", inputSchema: { type: "object", properties: { id, amount: { type: "number" }, note: { type: "string" } }, required: ["id"] }, run: (c, a) => ops.renew(c, a.id, { amount: a.amount, note: a.note }) },
+  { name: "set_focus", description: "设置关注 / 置顶（一次一项）。置顶隐含关注；取消关注会同时取消置顶。可写令牌会生成待审批计划。", inputSchema: { type: "object", properties: { id, starred: { type: "boolean" }, pinned: { type: "boolean" } }, required: ["id"] },
+    run: (c, a) => ops.focus(c, a.id, { ...(typeof a.starred === "boolean" ? { starred: a.starred } : {}), ...(typeof a.pinned === "boolean" ? { pinned: a.pinned } : {}) }) },
   { name: "delete_asset", description: "删除到回收站（30 天内可恢复）", inputSchema: { type: "object", properties: { id }, required: ["id"] }, run: (c, a) => ops.remove(c, a.id) },
   { name: "doctor", description: "检查缺字段、重复、过期未处理、无关联的资产", inputSchema: { type: "object", properties: {} }, run: (c) => ops.doctor(c) },
   { name: "audit_log", description: "最近的操作日志", inputSchema: { type: "object", properties: { asset_id: { type: "string" }, limit: { type: "number" } } }, run: (c, a) => ops.log(c, { assetId: a.asset_id, limit: a.limit }) },

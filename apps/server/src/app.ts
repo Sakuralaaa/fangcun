@@ -185,9 +185,11 @@ export function createApp({ store, komari, backup, rates, atoll, cloudflare, web
   // ---------- assets ----------
   app.get("/api/assets", (c) => {
     need(c, "read");
-    const { type, q, deleted, tag } = c.req.query();
+    const { type, q, deleted, tag, starred, pinned } = c.req.query();
     let list = store.list({ deleted: deleted === "1" });
     if (type) list = list.filter((a) => a.type === type);
+    if (starred === "1") list = list.filter((a) => a.starred);
+    if (pinned === "1") list = list.filter((a) => a.pinned);
     if (tag) list = list.filter((a) => a.tags.includes(tag));
     if (q) list = searchAssets(list, q);
     return c.json({ assets: list.map(toPublic), today: todayIso() });
@@ -230,6 +232,21 @@ export function createApp({ store, komari, backup, rates, atoll, cloudflare, web
     const tags = [...before.tags.filter((t) => !remove.includes(t)), ...add.filter((t) => !before.tags.includes(t))];
     const op = store.updateOp(before.id, { tags });
     return respond(c, store.commit(a, [op], `改标签「${before.name}」`, "tag"));
+  });
+  /** 关注 / 置顶 — one asset per call; 可写令牌 makes a change plan like any other write. */
+  app.post("/api/assets/:id/focus", async (c) => {
+    const a = need(c, "write");
+    const before = store.resolve(c.req.param("id"));
+    const { starred, pinned } = await body<{ starred?: boolean; pinned?: boolean }>(c);
+    const patch: { starred?: boolean; pinned?: boolean } = {};
+    if (typeof starred === "boolean") patch.starred = starred;
+    if (typeof pinned === "boolean") patch.pinned = pinned;
+    if (!Object.keys(patch).length) throw new HttpError(400, "需要 starred 或 pinned（true / false）");
+    const op = store.updateOp(before.id, patch);
+    if (op.op === "put" && !diffAssets(op.before, op.after).length) return c.json({ status: "unchanged", assets: [toPublic(op.after)] });
+    const after = op.op === "put" ? op.after : before;
+    const what = after.pinned && !before.pinned ? "置顶" : !after.pinned && before.pinned && after.starred ? "取消置顶" : after.starred && !before.starred ? "关注" : "取消关注";
+    return respond(c, store.commit(a, [op], `${what}「${before.name}」`, "focus"));
   });
   app.post("/api/assets/:id/link", async (c) => {
     const a = need(c, "write");

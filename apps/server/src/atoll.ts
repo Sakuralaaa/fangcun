@@ -1,3 +1,4 @@
+import { cleanSecret } from "./secrets";
 import {
   mergeAtollDomains, pickAtollDomain, pickAtollProject, pickAtollServer,
   type AtollProject, type AtollSnapshot,
@@ -52,7 +53,7 @@ export class AtollService {
   private inflight: Promise<AtollSnapshot> | null = null;
   state: AtollState = {};
 
-  constructor(private store: Store, private apiKey = process.env.ATOLL_API_KEY ?? "", private fetchImpl: typeof fetch = fetch) {}
+  constructor(private store: Store, private apiKey = cleanSecret(process.env.ATOLL_API_KEY).value, private fetchImpl: typeof fetch = fetch) {}
 
   get hasKey() { return Boolean(this.apiKey); }
 

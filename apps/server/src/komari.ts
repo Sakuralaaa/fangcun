@@ -1,3 +1,4 @@
+import { cleanSecret } from "./secrets";
 import {
   applyKomari, assetFromClient, mapStatus, stableJson, summarizePing,
   type Asset, type KomariClient, type KomariPingRecords, type KomariRecord, type NodePing, type NodeStatus, type Op, type PingState,
@@ -57,7 +58,7 @@ export class KomariService {
   private timers: NodeJS.Timeout[] = [];
   state: KomariState = { configured: false, url: "", hasKey: false };
 
-  constructor(private store: Store, private apiKey = process.env.KOMARI_API_KEY ?? "", private fetchImpl: typeof fetch = fetch) {}
+  constructor(private store: Store, private apiKey = cleanSecret(process.env.KOMARI_API_KEY).value, private fetchImpl: typeof fetch = fetch) {}
 
   private base(): string {
     const url = this.store.settings().komari.url.trim().replace(/\/+$/, "");

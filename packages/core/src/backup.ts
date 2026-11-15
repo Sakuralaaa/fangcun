@@ -94,6 +94,11 @@ export function migrateDoc(raw: unknown): DataDoc {
     assets = assets.map((a) => (a.type === "sub" ? { ...a, type: "subscription" } : a));
     v = 2;
   }
+  if (v < 3) {
+    // v2 → v3: 新增「关注」starred 与「置顶」pinned，旧数据默认都不关注
+    assets = assets.map((a) => ({ ...a, starred: Boolean(a.starred), pinned: Boolean(a.pinned) }));
+    v = 3;
+  }
   return {
     schemaVersion: SCHEMA_VERSION,
     exportedAt: doc.exportedAt ?? new Date().toISOString(),

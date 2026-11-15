@@ -4,6 +4,7 @@ import {
   type CfAccount, type CfDnsRecord, type CfPagesProject, type CfR2Bucket, type CfRegistration, type CfSection, type CfSectionState, type CfSnapshot,
   type CfTunnel, type CfWorker, type CfZone,
 } from "@fangcun/core";
+import { cleanId, cleanSecret, cloudflareTokenHint } from "./secrets";
 import { HttpError, type Store } from "./store";
 
 /**
@@ -110,10 +111,19 @@ export class CloudflareService {
 
   constructor(
     private store: Store,
-    private token = process.env.CLOUDFLARE_API_TOKEN ?? "",
-    private accountId = (process.env.CLOUDFLARE_ACCOUNT_ID ?? "").trim().toLowerCase(),
+    rawToken: string | undefined = process.env.CLOUDFLARE_API_TOKEN,
+    rawAccountId: string | undefined = process.env.CLOUDFLARE_ACCOUNT_ID,
     private fetchImpl: typeof fetch = fetch,
-  ) {}
+  ) {
+    const t = cleanSecret(rawToken);
+    this.token = t.value;
+    this.tokenStripped = t.stripped;
+    this.accountId = cleanId(rawAccountId);
+  }
+  private token: string;
+  private accountId: string;
+  /** What cleaning removed from CLOUDFLARE_API_TOKEN (e.g. quotes from docker-compose), for the 401 message. */
+  private tokenStripped: string[];
 
   get hasToken() { return Boolean(this.token); }
   get hasAccountId() { return Boolean(this.accountId); }
@@ -196,8 +206,23 @@ export class CloudflareService {
 
   private invalid(e: unknown): Error {
     if (e instanceof HttpError) return e;
-    if (e instanceof CfError) return new HttpError(400, `Cloudflare 令牌无效、已过期或已吊销（${e.status}）。请检查 CLOUDFLARE_API_TOKEN${this.accountId ? "" : "；账户令牌（cfat_ 开头）还需要设置 CLOUDFLARE_ACCOUNT_ID"}`);
+    if (e instanceof CfError) return new HttpError(400, this.diagnose(e.status));
     return new HttpError(502, `连不上 Cloudflare：${(e as Error).message}`);
+  }
+
+  /** A 401/403 message that helps find the cause without ever showing more than the token's first five characters. */
+  diagnose(status: number): string {
+    const h = cloudflareTokenHint(this.token);
+    const parts = [
+      `Cloudflare 拒绝了令牌（${status}）：令牌无效、已过期、已吊销，或没有权限。`,
+      `当前令牌：${h.prefix}…（${h.label}，${h.length} 个字符）。`,
+    ];
+    if (this.tokenStripped.length) parts.push(`已自动去掉值里的${this.tokenStripped.join("、")}。`);
+    if (h.odd) parts.push(`${h.odd}。`);
+    if (h.kind === "account" && !this.accountId) parts.push("cfat_ 开头的是账户令牌，必须同时设置 CLOUDFLARE_ACCOUNT_ID（账户 ID）。");
+    parts.push("如果令牌设置了「客户端 IP 地址筛选」，要把本服务器的出口 IP 加进去。");
+    parts.push("改了环境变量后要重建容器（docker compose up -d --force-recreate），只 restart 不会读到新值。");
+    return parts.join("");
   }
 
   snapshot(): CfSnapshot | null {
@@ -218,7 +243,7 @@ export class CloudflareService {
         const tok = await this.checkToken();
         if (tok.readOnly === false) {
           const w = (tok.permissions ?? []).filter(isWritePermission);
-          throw new HttpError(400, `这个 Cloudflare 令牌不是只读的（含 ${w.join("、")}）。方寸拒绝使用它，请另建一个只勾「Read」权限的令牌，替换 CLOUDFLARE_API_TOKEN 后重启方寸。`);
+          throw new HttpError(400, `这个 Cloudflare 令牌不是只读的（含 ${w.join("、")}）。方寸拒绝使用它，请另建一个只勾「Read」权限的令牌，替换 CLOUDFLARE_API_TOKEN 后重建方寸容器（docker compose up -d --force-recreate）。`);
         }
         const snap = await this.pull();
         this.store.setMeta(META_SNAPSHOT, JSON.stringify(snap));

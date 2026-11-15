@@ -128,3 +128,15 @@ body {
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: transparent; border-radius: 8px; }
 :hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-ink) 14%, transparent); }
+
+/*
+ * One page-width rule for every page (v0.1.6): content grows with the window, 40px side margins
+ * (32px below 1280, 16px on phones) and a 1600px cap on very wide screens.
+ * Settings are forms: same margins, but capped at 960px of content and aligned to the settings menu.
+ */
+@layer components {
+  .page { box-sizing: border-box; width: 100%; max-width: 1600px; margin-inline: auto; padding: 28px 40px; }
+  .page-form { max-width: 1040px; margin-inline: 0; }
+  @media (max-width: 1279.98px) { .page { padding-inline: 32px; } }
+  @media (max-width: 767.98px) { .page { padding: 16px; } }
+}

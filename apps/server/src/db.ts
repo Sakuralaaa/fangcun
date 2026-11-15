@@ -32,6 +32,9 @@ const MIGRATIONS: string[] = [
      ops TEXT NOT NULL, status TEXT NOT NULL, decided_at TEXT
    );
    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
+  // v0.1.6: 关注 / 置顶. Existing assets default to not starred, not pinned.
+  `UPDATE assets SET data = json_set(data, '$.starred', json('false')) WHERE json_type(data, '$.starred') IS NULL;
+   UPDATE assets SET data = json_set(data, '$.pinned', json('false')) WHERE json_type(data, '$.pinned') IS NULL;`,
 ];
 
 export type DB = DatabaseSync;

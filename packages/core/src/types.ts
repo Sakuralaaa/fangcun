@@ -1,6 +1,6 @@
 /** Data schema version. Bump together with a migration in backup.ts. */
-export const SCHEMA_VERSION = 2;
-export const APP_VERSION = "0.1.5";
+export const SCHEMA_VERSION = 3;
+export const APP_VERSION = "0.1.6";
 
 export const ASSET_TYPES = [
   "server", "domain", "cert", "subscription", "mail", "phone", "payment", "account", "document",
@@ -122,6 +122,10 @@ export interface Asset {
   accountId?: string | null;
   related: string[];
   note?: string;
+  /** 关注：用户手动标星的重要资产。只由用户改动，任何同步都不会覆盖。 */
+  starred: boolean;
+  /** 置顶：关注项中再排到列表最前。置顶隐含关注（pinned ⇒ starred）。 */
+  pinned: boolean;
   renewals: Renewal[];
   komari?: KomariLink | null;
   atoll?: AtollLink | null;
