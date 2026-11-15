@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+data/
+*.fangcun
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+coverage/
+notes/
+repo/
+work/
