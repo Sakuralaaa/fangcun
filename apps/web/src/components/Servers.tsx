@@ -125,7 +125,7 @@ export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
           </div>
         )}
 
-        {!servers.length && <p className="rounded-md border border-dashed border-line px-6 py-10 text-center text-[13px] text-subtle">还没有服务器。到「设置 → Komari 探针」把节点一键导入，或在资产里手动添加。</p>}
+        {!servers.length && <p className="rounded-md border border-dashed border-line px-6 py-10 text-center text-[13px] text-subtle">还没有服务器</p>}
         {view === "list" ? (
           <ListView servers={shown} st={st} showPing={showPing} onSelect={onSelect} />
         ) : (

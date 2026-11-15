@@ -213,7 +213,7 @@ export function StarButton({ on, onToggle, name, size = 15, reveal, className }:
     <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(); }} onKeyDown={(e) => e.stopPropagation()}
       aria-pressed={on} aria-label={on ? `取消关注「${name}」` : `关注「${name}」`} title={on ? "取消关注" : "关注"}
       className={clsx("grid shrink-0 place-items-center rounded-[6px] transition-[color,opacity] hover:bg-field focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ink/30",
-        on ? "text-ink" : "text-subtle hover:text-ink",
+        on ? "text-ink" : "text-muted hover:text-ink",
         reveal && !on && "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
         className ?? "size-7")}>
       <Star size={size} strokeWidth={1.9} fill={on ? "currentColor" : "none"} />
@@ -228,7 +228,7 @@ export function FocusMark({ starred, pinned, size = 12, className }: { starred?:
   if (!starred && !pinned) return null;
   return (
     <span className={clsx("inline-flex shrink-0 items-center gap-0.5 text-muted", className)} title={pinned ? "置顶 · 已关注" : "已关注"} aria-label={pinned ? "置顶，已关注" : "已关注"} role="img">
-      {pinned && <Pin size={size - 1} strokeWidth={2} className="text-subtle" />}
+      {pinned && <Pin size={size - 1} strokeWidth={2} />}
       <Star size={size} strokeWidth={1.9} fill="currentColor" />
     </span>
   );

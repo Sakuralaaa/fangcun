@@ -147,7 +147,7 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
                     <span className="flex-1 truncate text-muted">{r.note}{r.to ? <span className="text-subtle"> · 到期改为 {ymd(r.to)}</span> : null}</span>
                     <span className="shrink-0 font-medium whitespace-nowrap tnum">{money(r.amount, r.currency ?? a.currency)}</span>
                   </div>
-                )) : <Empty>还没有记录。点「标记已续费」会推进到期日并记一条。</Empty>}
+                )) : <Empty>还没有续费记录</Empty>}
               </Card>
               <div className="flex min-h-0 flex-col gap-4">
                 <NoteCard a={a} className="flex-1" />
@@ -325,7 +325,7 @@ function Attachments({ a }: { a: Asset }) {
           <a href={`/api/assets/${encodeURIComponent(a.id)}/attachments/${encodeURIComponent(f.name)}`} className="text-subtle hover:text-ink" title="下载"><Download size={14} /></a>
           <button onClick={() => remove(f.name)} className="text-subtle hover:text-crit" title="删除"><Trash2 size={14} /></button>
         </div>
-      )) : <Empty>合同、发票、证书文件可以放这里，会随完整备份一起导出。</Empty>}
+      )) : <Empty>还没有附件</Empty>}
     </Card>
   );
 }

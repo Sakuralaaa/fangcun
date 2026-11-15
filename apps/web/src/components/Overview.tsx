@@ -72,7 +72,7 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
           </Card>
         ) : (
           <p className="flex items-center gap-2 rounded-md border border-dashed border-line px-4 py-2.5 text-[13px] text-subtle">
-            <Star size={14} strokeWidth={1.9} className="shrink-0" />在资产列表里点星标关注重要的资产，它们的到期、费用和在线状态会集中显示在这里。
+            <Star size={14} strokeWidth={1.9} className="shrink-0" />还没有关注的资产
           </p>
         )}
 
@@ -169,7 +169,7 @@ function StarredRow({ a, odd, online, onClick }: { a: Asset; odd: boolean; onlin
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className={clsx("truncate font-semibold", a.type === "server" && "font-mono text-[12.5px]")}>{a.name}</span>
-          {a.pinned && <Pin size={11} strokeWidth={2} className="shrink-0 text-subtle" aria-label="置顶" />}
+          {a.pinned && <Pin size={11} strokeWidth={2} className="shrink-0 text-muted" aria-label="置顶" />}
         </div>
         <div className="flex min-w-0 items-center gap-1.5 truncate text-xs text-subtle">
           {a.komari && <span className={clsx("inline-flex shrink-0 items-center gap-1", online ? "text-ok" : "text-subtle")}><span className={clsx("size-1.5 rounded-full", online ? "bg-ok" : "bg-subtle")} />{online ? "在线" : "离线"}</span>}

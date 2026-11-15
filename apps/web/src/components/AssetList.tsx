@@ -95,7 +95,7 @@ function Row({ a, on, onClick, online, onStar }: { a: Asset; on: boolean; onClic
           <div className="flex items-center gap-1.5">
             <span className={clsx("truncate font-semibold", card?.status === "closed" && "text-subtle line-through")}>{a.name}</span>
             {a.komari && <span className={clsx("size-1.5 shrink-0 rounded-full", online ? "bg-ok" : "bg-subtle")} />}
-            {a.pinned && <Pin size={11} strokeWidth={2} className="shrink-0 text-subtle" aria-label="置顶" />}
+            {a.pinned && <Pin size={11} strokeWidth={2} className="shrink-0 text-muted" aria-label="置顶" />}
           </div>
           <div className="truncate text-xs text-subtle">{a.subtitle || (card ? `${card.network ?? ""} ···· ${card.last4}` : a.provider)}</div>
         </div>

@@ -29,7 +29,6 @@ export function Login({ setup, onDone }: { setup: boolean; onDone: () => void })
       <form onSubmit={submit} className="w-full max-w-[380px] rounded-lg border border-line bg-panel p-7 shadow-[0_8px_30px_rgb(0_0_0/0.04)]">
         <div className="flex items-center gap-3"><Logo size={34} /><div><div className="text-[18px] font-bold tracking-tight">方寸</div><div className="text-xs text-subtle">个人资产台账</div></div></div>
         <h1 className="mt-6 text-[15px] font-semibold">{setup ? "第一次使用：设置管理员账号" : needCode ? "输入两步验证动态码" : "登录"}</h1>
-        {setup && <p className="mt-1 text-xs leading-relaxed text-subtle">方寸是单用户应用，这个账号就是你自己的。密码用 scrypt 哈希保存。</p>}
         <div className="mt-4 flex flex-col gap-3">
           {!needCode && <>
             <Field label="用户名"><TextInput value={u} onChange={setU} autoFocus /></Field>

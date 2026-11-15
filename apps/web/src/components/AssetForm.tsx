@@ -85,7 +85,7 @@ export function AssetForm({ asset, initialType, onClose, onSaved }: { asset?: As
       {t === "account" && <AccountFields d={d} set={set} />}
 
       {priced && (
-        <Section title="费用与到期" hint="按实付手填，不做汇率换算">
+        <Section title="费用与到期">
           <div className="col-span-2 grid grid-cols-[1fr_0.8fr_1fr_1.2fr] gap-3">
             <Field label={t === "payment" ? "年费 / 月费" : "价格"}><TextInput value={String(d.price ?? 0)} onChange={(v) => set("price", Number(v) || 0)} inputMode="decimal" /></Field>
             <Field label="币种"><Select value={d.currency ?? "USD"} onChange={(v) => set("currency", v)} options={[...new Set([...CURRENCIES, d.currency ?? "USD"])].map((c) => [c, c] as [string, string])} /></Field>
@@ -102,7 +102,7 @@ export function AssetForm({ asset, initialType, onClose, onSaved }: { asset?: As
 
       {t === "subscription" && <TeamFields d={d} set={set} />}
       {t === "server" && (
-        <Section title="Komari" hint="按 uuid 绑定后，价格、到期、配置、IP 会从探针同步">
+        <Section title="Komari">
           <Field label="节点 uuid"><TextInput value={d.komari?.uuid} mono onChange={(v) => set("komari", v ? { ...(d.komari ?? { fields: {}, overridden: {} }), uuid: v } : null)} placeholder="也可在 设置 → Komari 里一键绑定" /></Field>
           <Field label="流量重置日" hint="每月几号"><TextInput value={d.komari?.trafficResetDay ?? ""} inputMode="numeric" onChange={(v) => d.komari && set("komari", { ...d.komari, trafficResetDay: Number(v) || undefined })} /></Field>
         </Section>
@@ -144,7 +144,7 @@ function PaymentFields({ d, set }: { d: Draft; set: SetFn }) {
   const p = d.payment ?? { issuer: "", last4: "", status: "active" as CardStatus };
   const up = (patch: Partial<typeof p>) => set("payment", { ...p, ...patch });
   return (
-    <Section title="卡片" hint="只保存卡号末四位，绝不保存完整卡号和 CVV">
+    <Section title="卡片">
       <Field label="发卡平台"><TextInput value={p.issuer} onChange={(v) => { up({ issuer: v }); set("provider", v); }} placeholder="如 某数字银行 / U 卡平台" /></Field>
       <Field label="卡组织"><Select value={p.network ?? ""} onChange={(v) => up({ network: v || undefined })} options={[["", "未填"], ...CARD_NETWORKS.map((n) => [n, n] as [string, string])]} /></Field>
       <Field label="卡号末四位"><TextInput value={p.last4} onChange={(v) => up({ last4: v.replace(/\D/g, "").slice(0, 4) })} mono maxLength={4} inputMode="numeric" placeholder="4242" /></Field>
@@ -160,7 +160,7 @@ function AccountFields({ d, set }: { d: Draft; set: SetFn }) {
   const a = d.account ?? { username: "" };
   const up = (patch: Partial<typeof a>) => set("account", { ...a, ...patch });
   return (
-    <Section title="账号" hint="网页版不保存密码；端到端加密保险库在 v0.2">
+    <Section title="账号">
       <Field label="用户名 / 邮箱"><TextInput value={a.username} onChange={(v) => up({ username: v })} /></Field>
       <Field label="登录地址"><TextInput value={a.site} onChange={(v) => up({ site: v })} mono /></Field>
       <Field label="相关网站" hint="每行：名称 网址" className="col-span-2">
@@ -178,7 +178,7 @@ function TeamFields({ d, set }: { d: Draft; set: SetFn }) {
   const upWs = (i: number, patch: Partial<Workspace>) => set("team", { owner: team?.owner ?? "", workspaces: ws.map((w, j) => (j === i ? { ...w, ...patch } : w)) });
   const add = () => set("team", { owner: team?.owner ?? "", workspaces: [...ws, { id: `ws_${Date.now().toString(36)}`, name: `空间 ${ws.length + 1}`, seats: 5, price: 0, currency: d.currency ?? "USD", cycle: d.cycle ?? "month", expiresAt: d.expiresAt ?? null, members: [] }] });
   return (
-    <Section title="团队订阅" hint="母号 → 工作空间 → 成员；总价和到期由各空间汇总">
+    <Section title="团队订阅">
       {!team ? (
         <div className="col-span-2"><Button icon={<Plus size={14} />} onClick={() => set("team", { owner: "", workspaces: [] })}>这是团队订阅（有工作空间和成员）</Button></div>
       ) : (
@@ -199,7 +199,7 @@ function TeamFields({ d, set }: { d: Draft; set: SetFn }) {
               <div className="mt-2 grid grid-cols-[1fr_1fr_2fr] gap-2">
                 <Field label="区域"><TextInput value={w.region} onChange={(v) => upWs(i, { region: v })} /></Field>
                 <Field label="折扣"><TextInput value={w.discount} onChange={(v) => upWs(i, { discount: v })} /></Field>
-                <Field label="成员邮箱" hint="每行一个，母号自动算一席">
+                <Field label="成员邮箱" hint="每行一个">
                   <TextArea rows={2} value={w.members.filter((m) => m.role !== "owner").map((m) => m.email).join("\n")}
                     onChange={(v) => upWs(i, { members: [...(team.owner ? [{ email: team.owner, role: "owner" as const }] : []), ...v.split("\n").map((e) => e.trim()).filter(Boolean).map((email) => ({ ...w.members.find((m) => m.email === email), email, role: "member" as const }))] })} />
                 </Field>
