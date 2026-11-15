@@ -6,29 +6,40 @@ import type { Asset } from "../data/types";
 import { api, download, get, post } from "../lib/api";
 import { useData } from "../lib/store";
 import { AtollBadge } from "./Atoll";
-import { Button, Card, Empty, Field, KomariBadge, Select, TextInput, Toggle, TypeIcon } from "./ui";
+import { CloudflareSettings } from "./Cloudflare";
+import { Button, Card, Empty, Field, KomariBadge, ScrollRow, Select, TextInput, Toggle, TypeIcon } from "./ui";
 
 export const SETTINGS_TABS: [string, string][] = [
-  ["general", "常规"], ["security", "登录与两步验证"], ["komari", "Komari 探针"], ["atoll", "Atoll 面板"], ["tokens", "访问令牌"],
+  ["general", "常规"], ["security", "登录与两步验证"], ["komari", "Komari 探针"], ["atoll", "Atoll 面板"], ["cloudflare", "Cloudflare"], ["tokens", "访问令牌"],
   ["plans", "变更审批"], ["log", "操作日志"], ["trash", "回收站"], ["backup", "备份与导出"], ["about", "关于"],
 ];
 
 export function Settings({ tab = "general", onTab }: { tab?: string; onTab: (t: string) => void }) {
   const current = SETTINGS_TABS.some(([k]) => k === tab) ? tab : "general";
   return (
-    <main className="flex min-w-0 flex-1">
-      <aside className="w-[220px] shrink-0 border-r border-line bg-panel px-3 py-5">
+    <main className="flex min-w-0 flex-1 max-md:flex-col">
+      <aside className="w-[200px] shrink-0 border-r border-line bg-panel px-3 py-5 max-md:hidden lg:w-[220px]">
         <h2 className="mb-3 px-2 text-[17px] font-bold">设置</h2>
         {SETTINGS_TABS.map(([k, n]) => (
-          <button key={k} onClick={() => onTab(k)} className={clsx("flex h-9 w-full items-center rounded-sm px-2.5 text-left text-[13px]", k === current ? "bg-sel font-semibold text-accent" : "text-muted hover:bg-field")}>{n}</button>
+          <button key={k} onClick={() => onTab(k)} className={clsx("flex h-9 w-full items-center rounded-sm px-2.5 text-left text-[13px] whitespace-nowrap", k === current ? "bg-sel font-semibold text-accent" : "text-muted hover:bg-field")}>{n}</button>
         ))}
       </aside>
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-[860px] flex-col gap-4 px-8 py-7">
+      <div className="shrink-0 border-b border-line bg-panel pt-3 md:hidden">
+        <h2 className="px-4 text-[17px] font-bold">设置</h2>
+        <ScrollRow className="mt-2 gap-1 px-3" activeKey={current}>
+          {SETTINGS_TABS.map(([k, n]) => (
+            <button key={k} onClick={() => onTab(k)} aria-current={k === current ? "true" : undefined}
+              className={clsx("relative h-10 shrink-0 px-2.5 text-[13px] whitespace-nowrap", k === current ? "font-semibold text-ink after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink" : "text-muted")}>{n}</button>
+          ))}
+        </ScrollRow>
+      </div>
+      <div className="@container min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex max-w-[860px] flex-col gap-4 px-8 py-7 max-md:px-4 max-md:py-4">
           {current === "general" && <General />}
           {current === "security" && <Security />}
           {current === "komari" && <Komari />}
           {current === "atoll" && <AtollSettings />}
+          {current === "cloudflare" && <CloudflareSettings onSelect={(id) => { location.hash = `#/assets/${id}`; }} />}
           {current === "tokens" && <Tokens />}
           {current === "plans" && <Plans />}
           {current === "log" && <Log />}
@@ -82,7 +93,7 @@ function General() {
       <Title sub="价格一律按实付手填，不做换算。汇率只用于总览里的「约」合计。">常规</Title>
       {demoOnly(demo)}
       <Card title="合计用的币种与汇率">
-        <div className="grid grid-cols-[200px_1fr] gap-4">
+        <div className="grid gap-4 @lg:grid-cols-[200px_1fr]">
           <div className="space-y-4">
             <Field label="合计币种"><TextInput value={d.currency} onChange={(v) => setD({ ...d, currency: v })} mono /></Field>
             <Field label="自动更新汇率" hint="每 6 小时从欧洲央行参考汇率（Frankfurter）拉取，缺的币种用 open.er-api 补">
@@ -128,8 +139,8 @@ function Security() {
         <p className="text-[13px] leading-relaxed text-muted">开启后登录需要动态码；在网页里备份、导出、恢复和调整自动备份设置前也要再输一次动态码（10 分钟内有效）。</p>
         {!me?.totpEnabled && !setup && <div className="mt-3"><Button variant="primary" onClick={begin} disabled={demo}>绑定验证器</Button></div>}
         {setup && (
-          <div className="mt-4 grid grid-cols-[180px_1fr] gap-5">
-            <div className="rounded-sm border border-line bg-white p-2 [&_svg]:h-auto [&_svg]:w-full" dangerouslySetInnerHTML={{ __html: setup.svg }} />
+          <div className="mt-4 grid gap-5 @lg:grid-cols-[180px_1fr]">
+            <div className="w-full max-w-[180px] rounded-sm border border-line bg-white p-2 [&_svg]:h-auto [&_svg]:w-full" dangerouslySetInnerHTML={{ __html: setup.svg }} />
             <div className="flex flex-col gap-3">
               <p className="text-[13px] text-muted">用验证器 App 扫码，或手动输入密钥：</p>
               <code className="rounded-sm bg-field px-3 py-2 font-mono text-[12.5px] break-all">{setup.secret}</code>
@@ -141,7 +152,7 @@ function Security() {
         {me?.totpEnabled && <div className="mt-3"><Button variant="danger" onClick={disable}>关闭两步验证</Button></div>}
       </Card>
       <Card title="修改密码">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 @lg:grid-cols-2">
           <Field label="当前密码"><TextInput type="password" value={pw.old} onChange={(v) => setPw({ ...pw, old: v })} /></Field>
           <Field label="新密码" hint="至少 10 位"><TextInput type="password" value={pw.password} onChange={(v) => setPw({ ...pw, password: v })} /></Field>
         </div>
@@ -203,29 +214,29 @@ function Komari() {
     <>
       <Title sub="只读同步服务器信息。方寸不会写回探针，也不会使用终端或执行命令。">Komari 探针 <KomariBadge /></Title>
       <Card title="连接" extra={connected ? <span className="flex items-center gap-1.5 text-ok"><span className="size-1.5 rounded-full bg-ok" />已连接{komari?.version ? ` · 服务端 ${komari.version}` : ""}</span> : <span className="text-warn">{komari?.lastError || err || (komari?.hasKey ? "未连接" : "缺少 API Key")}</span>}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 @lg:grid-cols-2">
           <Field label="探针地址">
             <div className="flex gap-2"><TextInput value={url} onChange={setUrl} mono placeholder="https://probe.example.com" /><Button onClick={() => saveField({ url: url.trim() })} disabled={url === k.url}>保存</Button></div>
           </Field>
           <Field label="API Key">
-            <span className="flex h-9 items-center gap-2 rounded-sm border border-line bg-field px-3 text-[13px] text-subtle"><Lock size={13} />{komari?.hasKey ? "由服务端环境变量 KOMARI_API_KEY 提供" : "请在服务端设置环境变量 KOMARI_API_KEY"}</span>
+            <span className="flex h-9 min-w-0 items-center gap-2 rounded-sm border border-line bg-field px-3 text-[13px] text-subtle"><Lock size={13} className="shrink-0" /><span className="truncate">{komari?.hasKey ? "由服务端环境变量 KOMARI_API_KEY 提供" : "请在服务端设置环境变量 KOMARI_API_KEY"}</span></span>
           </Field>
         </div>
-        <div className="mt-4 flex items-center gap-3 text-[13px]">
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
           <span className="whitespace-nowrap text-muted" title="价格、到期、配置、IP 等台账字段，这些很少变">台账字段同步</span>
           <div className="w-36 shrink-0"><Select value={String(k.intervalMin)} onChange={(v) => saveField({ intervalMin: Number(v) })} options={[["5", "每 5 分钟"], ["15", "每 15 分钟"], ["30", "每 30 分钟"], ["60", "每小时"], ["360", "每 6 小时"], ["1440", "每天"]]} /></div>
-          <span className="min-w-0 truncate text-xs text-subtle">{komari?.lastSync ? `上次 ${new Date(komari.lastSync).toLocaleString("zh-CN", { hour12: false })}` : "还没同步过"}{komari?.nodes != null ? `，${komari.nodes} 个节点` : ""}</span>
+          <span className="min-w-0 truncate text-xs text-subtle @max-lg:basis-full @max-lg:order-last">{komari?.lastSync ? `上次 ${new Date(komari.lastSync).toLocaleString("zh-CN", { hour12: false })}` : "还没同步过"}{komari?.nodes != null ? `，${komari.nodes} 个节点` : ""}</span>
           <div className="flex-1" />
           <Button icon={<RefreshCw size={14} className={clsx(busy && "animate-spin")} />} onClick={sync} disabled={demo || busy || !k.url}>立即同步</Button>
         </div>
-        <p className="mt-3 text-xs text-subtle">这里只管价格、到期、配置这些台账字段。CPU、内存、流量、网速等运行状态是另外实时拉的：总览、服务器页、详情页打开时每 10 秒刷新，没人看时服务端每 5 分钟缓存一次。只会请求 GET /api/admin/client/list，以及 rpc2 的 common:getNodesLatestStatus、common:getRecords（仅延迟记录，每分钟最多一次）。</p>
+        <p className="mt-3 text-xs [overflow-wrap:anywhere] text-subtle">这里只管价格、到期、配置这些台账字段。CPU、内存、流量、网速等运行状态是另外实时拉的：总览、服务器页、详情页打开时每 10 秒刷新，没人看时服务端每 5 分钟缓存一次。只会请求 GET /api/admin/client/list，以及 rpc2 的 common:getNodesLatestStatus、common:getRecords（仅延迟记录，每分钟最多一次）。</p>
       </Card>
 
       <Card title="以 Komari 为准的字段" extra="关掉的字段只在方寸里维护">
-        <div className="grid grid-cols-2 gap-x-6">
+        <div className="grid gap-x-6 @lg:grid-cols-2">
           {(Object.keys(KOMARI_GROUP_LABEL) as KomariFieldGroup[]).map((g) => (
             <div key={g} className="flex h-11 items-center gap-3 border-b border-line text-[13px]">
-              <span className="flex-1">{KOMARI_GROUP_LABEL[g][0]}<span className="ml-2 font-mono text-[11px] text-subtle">{KOMARI_GROUP_LABEL[g][1]}</span></span>
+              <span className="min-w-0 flex-1 truncate">{KOMARI_GROUP_LABEL[g][0]}<span className="ml-2 font-mono text-[11px] text-subtle">{KOMARI_GROUP_LABEL[g][1]}</span></span>
               <Toggle on={k.fields[g]} onChange={(v) => saveField({ fields: { ...k.fields, [g]: v } })} />
             </div>
           ))}
@@ -234,27 +245,30 @@ function Komari() {
       </Card>
 
       <Card title="节点绑定" extra={nodes ? `${nodes.filter((n) => n.assetId).length}/${nodes.length} 已绑定` : undefined} flush scroll className="max-h-[480px]">
-        <div className="grid h-9 shrink-0 grid-cols-[1.3fr_0.9fr_0.7fr_1.5fr_80px] items-center border-b border-line px-4 text-xs text-subtle">
-          <span>Komari 节点</span><span>地区</span><span>客户端</span><span>方寸资产</span><span className="text-right">状态</span>
+        <div className={clsx("grid h-9 shrink-0 items-center gap-3 border-b border-line px-4 text-xs whitespace-nowrap text-subtle", NODE_COLS)}>
+          <span>Komari 节点</span><span className="@max-xl:hidden">地区</span><span className="@max-xl:hidden">客户端</span><span>方寸资产</span><span className="text-right">状态</span>
         </div>
         {!nodes ? <Empty>{k.url ? (err ?? "读取中…") : "先填写探针地址"}</Empty> : nodes.map((n) => (
-          <div key={n.uuid} className="grid h-12 shrink-0 grid-cols-[1.3fr_0.9fr_0.7fr_1.5fr_80px] items-center border-b border-line px-4 text-[13px] last:border-0">
+          <div key={n.uuid} className={clsx("grid h-12 shrink-0 items-center gap-3 border-b border-line px-4 text-[13px] last:border-0", NODE_COLS)}>
             <span className="truncate font-mono text-[12.5px]" title={n.uuid}>{n.name || n.uuid.slice(0, 8)}</span>
-            <span className="truncate text-muted">{n.region || "—"}</span>
-            <span className="text-muted tnum">{n.version || "—"}</span>
+            <span className="truncate text-muted @max-xl:hidden">{n.region || "—"}</span>
+            <span className="whitespace-nowrap text-muted tnum @max-xl:hidden">{n.version || "—"}</span>
             {n.assetId ? (
-              <span className="flex items-center gap-1.5 truncate"><Check size={14} className="shrink-0 text-ok" />{n.assetName}
-                {!demo && <button onClick={() => unbind(n.assetId!)} className="ml-1 text-xs text-subtle hover:text-crit">解绑</button>}</span>
+              <span className="flex min-w-0 items-center gap-1.5"><Check size={14} className="shrink-0 text-ok" /><span className="truncate">{n.assetName}</span>
+                {!demo && <button onClick={() => unbind(n.assetId!)} className="ml-1 shrink-0 text-xs whitespace-nowrap text-subtle hover:text-crit">解绑</button>}</span>
             ) : (
               <Select value="" onChange={(v) => v && bind(n.uuid, v)} className="h-8 w-[90%]" options={[["", "选择要绑定的资产…"], ["__new", "＋ 新建服务器资产"], ...unboundServers.map((a) => [a.id, a.name] as [string, string])]} />
             )}
-            <span className={clsx("text-right text-xs", n.overridden ? "text-warn" : "text-subtle")}>{n.assetId ? (n.overridden ? `${n.overridden} 项手改` : "已同步") : "未绑定"}</span>
+            <span className={clsx("text-right text-xs whitespace-nowrap", n.overridden ? "text-warn" : "text-subtle")}>{n.assetId ? (n.overridden ? `${n.overridden} 项手改` : "已同步") : "未绑定"}</span>
           </div>
         ))}
       </Card>
     </>
   );
 }
+
+/** Komari 节点 · 地区 · 客户端 · 方寸资产 · 状态; 地区 and 客户端 drop out when narrow. */
+const NODE_COLS = "grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_64px] @xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)_minmax(0,0.7fr)_minmax(0,1.5fr)_80px]";
 
 // ---------------- Atoll ----------------
 function AtollSettings() {
@@ -289,12 +303,12 @@ function AtollSettings() {
       <Title sub="只读读取 Atoll 的服务器、项目、服务和域名，和方寸里的 VPS、域名对上号。方寸不会改动 Atoll，也不会改你手填的资产数据。">Atoll 面板 <AtollBadge /></Title>
       {demoOnly(demo)}
       <Card title="连接" extra={status}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 @lg:grid-cols-2">
           <Field label="面板地址">
             <div className="flex gap-2"><TextInput value={url} onChange={setUrl} mono placeholder="https://atoll.example.com" /><Button onClick={() => saveField({ url: url.trim() })} disabled={url === s.url}>保存</Button></div>
           </Field>
           <Field label="API Key">
-            <span className="flex h-9 items-center gap-2 rounded-sm border border-line bg-field px-3 text-[13px] text-subtle"><Lock size={13} />{atoll?.hasKey ? "已由环境变量 ATOLL_API_KEY 提供" : "未设置（服务端环境变量 ATOLL_API_KEY）"}</span>
+            <span className="flex h-9 min-w-0 items-center gap-2 rounded-sm border border-line bg-field px-3 text-[13px] text-subtle"><Lock size={13} className="shrink-0" /><span className="truncate">{atoll?.hasKey ? "已由环境变量 ATOLL_API_KEY 提供" : "未设置（服务端环境变量 ATOLL_API_KEY）"}</span></span>
           </Field>
         </div>
         {notReadOnly && (
@@ -303,16 +317,16 @@ function AtollSettings() {
           </p>
         )}
         {key?.readOnly === null && <p className="mt-3 text-xs text-subtle">没能从 Atoll 读到这个 key 的权限（面板版本较旧？），请自行确认它是只读（read）令牌。</p>}
-        <div className="mt-4 flex items-center gap-3 text-[13px]">
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
           <span className="whitespace-nowrap text-muted">启用</span>
           <Toggle on={s.enabled} onChange={(v) => saveField({ enabled: v })} />
-          <span className="ml-3 whitespace-nowrap text-muted">同步间隔</span>
+          <span className="whitespace-nowrap text-muted @lg:ml-3">同步间隔</span>
           <div className="w-32 shrink-0"><Select value={String(s.intervalMin)} onChange={(v) => saveField({ intervalMin: Number(v) })} options={[["5", "每 5 分钟"], ["15", "每 15 分钟"], ["30", "每 30 分钟"], ["60", "每小时"]]} /></div>
-          <span className="min-w-0 truncate text-xs text-subtle">{atoll?.lastSync ? `上次 ${new Date(atoll.lastSync).toLocaleString("zh-CN", { hour12: false })}` : "还没同步过"}{atoll?.projects != null ? `，${atoll.projects} 个项目` : ""}{atoll?.servers != null ? `、${atoll.servers} 台服务器` : ""}</span>
+          <span className="min-w-0 truncate text-xs text-subtle @max-lg:basis-full @max-lg:order-last">{atoll?.lastSync ? `上次 ${new Date(atoll.lastSync).toLocaleString("zh-CN", { hour12: false })}` : "还没同步过"}{atoll?.projects != null ? `，${atoll.projects} 个项目` : ""}{atoll?.servers != null ? `、${atoll.servers} 台服务器` : ""}</span>
           <div className="flex-1" />
           <Button icon={<RefreshCw size={14} className={clsx(busy && "animate-spin")} />} onClick={sync} disabled={demo || busy || !s.url || !s.enabled}>立即同步</Button>
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-subtle">
+        <p className="mt-3 text-xs leading-relaxed [overflow-wrap:anywhere] text-subtle">
           API Key 只从服务端环境变量读取，不存数据库、不发给浏览器。在 Atoll 面板左侧「连接」→「API 令牌」→「创建令牌」，权限选「只读」（read）。
           方寸只会请求 GET /auth/me、/servers、/projects、/projects/&#123;id&#125;、/domains，代码里拒绝任何其他请求，不会执行命令、查看变量或日志。
         </p>
@@ -360,7 +374,7 @@ function Tokens() {
       <Title sub="给 fangcun CLI 或 AI 代理（Codex、Claude Code 通过 fangcun mcp）用。令牌永远看不到密码类字段，也不能管理令牌或批准计划。">访问令牌</Title>
       {demoOnly(demo)}
       <Card title="新建令牌">
-        <div className="grid grid-cols-[1.3fr_1fr_0.8fr_auto] items-end gap-3">
+        <div className="grid grid-cols-2 items-end gap-3 @xl:grid-cols-[1.3fr_1fr_0.8fr_auto]">
           <Field label="名称"><TextInput value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Claude Code" /></Field>
           <Field label="权限"><Select value={form.scope} onChange={(v) => setForm({ ...form, scope: v })} options={(["read", "write", "full"] as TokenScope[]).map((s) => [s, SCOPE_LABEL[s]] as [TokenScope, string])} /></Field>
           <Field label="有效期"><Select value={form.days} onChange={(v) => setForm({ ...form, days: v })} options={[["7", "7 天"], ["30", "30 天"], ["90", "90 天"], ["365", "1 年"], ["0", "永不过期"]]} /></Field>
@@ -547,7 +561,7 @@ function Backup() {
       <Title sub={`完整备份是 .fangcun 文件（zip：manifest、数据、附件、操作日志，带校验和）。${me?.totpEnabled ? "网页端每次操作前需要输入动态码。" : "建议先开启两步验证。"}`}>备份与导出</Title>
       {demoOnly(demo)}
       <Card title="完整备份">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button variant="primary" icon={<Download size={14} />} onClick={guard(() => download("/api/backup/download", `fangcun-${new Date().toISOString().slice(0, 10)}.fangcun`))}>下载完整备份</Button>
           <Button icon={<Upload size={14} />} onClick={() => input.current?.click()} disabled={demo}>从备份恢复…</Button>
           <input ref={input} type="file" accept=".fangcun,.zip" hidden onChange={(e) => e.target.files?.[0] && choose(e.target.files[0])} />
@@ -618,7 +632,7 @@ function About() {
     <>
       <Title>关于方寸</Title>
       <Card>
-        <p className="text-[13px] leading-relaxed text-muted">方寸是个人资产台账：服务器、域名、证书、订阅、邮箱、号码、支付卡、账号和文档的到期与费用，一处管理。只读接入 Komari 探针和 Atoll 面板，不做任何远程操作。</p>
+        <p className="text-[13px] leading-relaxed text-muted">方寸是个人资产台账：服务器、域名、证书、订阅、邮箱、号码、支付卡、账号和文档的到期与费用，一处管理。只读接入 Komari 探针、Atoll 面板和 Cloudflare，不做任何远程操作。</p>
         <div className="mt-3 text-xs text-subtle">版本 {h?.version ?? "0.1.0"} · MIT License</div>
         <div className="mt-3 text-xs text-subtle">路线图：v0.2 端到端加密密码保险库 · 桌面版 · 手机 App · AI 额度插件</div>
       </Card>

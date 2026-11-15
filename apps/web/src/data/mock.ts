@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type AtollSnapshot, type NodeStatus, type Settings } from "@fangcun/core";
+import { DEFAULT_SETTINGS, type AtollSnapshot, type CfSnapshot, type NodeStatus, type Settings } from "@fangcun/core";
 import type { Asset, StatusMap } from "./types";
 
 /** Demo mode (?demo=1 or VITE_DEMO=1): fixed sample data, nothing leaves the browser. */
@@ -173,7 +173,7 @@ export const demoStatus: StatusMap = {
   "8d8d-lon": st({ uuid: "8d8d-lon", online: false, group: "建站", cores: 1, os: "Alpine 3.20", region: "🇬🇧", totalUp: 12 * G, totalDown: 9 * G, trafficLimit: 0 }),
 };
 
-export const demoSettings: Settings = { ...DEFAULT_SETTINGS, komari: { ...DEFAULT_SETTINGS.komari, url: "https://probe.sak.example" }, atoll: { enabled: true, url: "https://atoll.sak.example", intervalMin: 15 } };
+export const demoSettings: Settings = { ...DEFAULT_SETTINGS, komari: { ...DEFAULT_SETTINGS.komari, url: "https://probe.sak.example" }, atoll: { enabled: true, url: "https://atoll.sak.example", intervalMin: 15 }, cloudflare: { enabled: true } };
 export const demoKomariInfo = { url: "https://probe.sak.example", hasKey: true, version: "1.2.5 (e446bee)", lastSync: "2026-11-15T03:02:00.000Z", lastError: null, nodes: 8 };
 
 // Atoll (read-only container panel) — demo snapshot. hk-api-01/02 and sg-pg match by public IP;
@@ -218,4 +218,71 @@ export const demoAtollSnapshot: AtollSnapshot = {
 export const demoAtollInfo = {
   enabled: true, url: "https://atoll.sak.example", hasKey: true, lastSync: AT, lastError: null, projects: 6, servers: 5,
   key: { readOnly: true, permissions: ["read"], projectScoped: false, checkedAt: AT },
+};
+
+// Cloudflare (read-only) — demo snapshot. starbridge.example was renewed at Cloudflare but the ledger still says 2026-12-03
+// (so a suggestion shows); admin.starbridge.example points at hk-api-01 while Atoll runs it on hk-api-02; status.sak.dev
+// has no record yet; bi.* goes through the sg-data tunnel (cloudflared on sg-pg-primary); sak-lab.net and shop-preview.io
+// have no domain asset (importable).
+const CF = "Sun 2026-11-15 3:06 AM UTC (UTC+00:00)";
+const ACC = "4f1c9a7e2b6d4c0f8a3e5b7d9c1e2f30";
+const ZS = "9a1f3c5e7b2d4f6a8c0e1b3d5f7a9c2e";
+const ZD = "1c3e5a7f9b2d4e6f8a0c2e4b6d8f0a1c";
+const TUN_SG = "6f1e2d3c-4b5a-4968-8776-a5b4c3d2e1f0";
+const TUN_HOME = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const ns = ["ada.ns.cloudflare.com", "rob.ns.cloudflare.com"];
+const r = (zoneId: string, name: string, type: "A" | "AAAA" | "CNAME", content: string, proxied = true) => ({ zoneId, name, type, content, proxied, ttl: 1 });
+export const demoCfSnapshot: CfSnapshot = {
+  syncedAt: CF,
+  accounts: [{ id: ACC, name: "sak 的账户" }],
+  zones: [
+    { id: ZS, name: "starbridge.example", status: "active", paused: false, accountId: ACC, nameServers: ns, originalRegistrar: "域名注册商", plan: "Free Website" },
+    { id: ZD, name: "sak.dev", status: "active", paused: false, accountId: ACC, nameServers: ns, plan: "Free Website" },
+    { id: "7e9c1a3b5d7f9e1c3a5b7d9f1e3c5a7b", name: "sak-lab.net", status: "active", paused: false, accountId: ACC, nameServers: ns, plan: "Free Website" },
+    { id: "2b4d6f8a0c2e4a6c8e0b2d4f6a8c0e2b", name: "shop-preview.io", status: "pending", paused: false, accountId: ACC, nameServers: ["kim.ns.cloudflare.com", "tom.ns.cloudflare.com"], originalRegistrar: "其他注册商", plan: "Free Website" },
+  ],
+  records: [
+    r(ZS, "starbridge.example", "A", "192.0.2.10"),
+    r(ZS, "www.starbridge.example", "CNAME", "starbridge.example"),
+    r(ZS, "api.starbridge.example", "A", "192.0.2.11"),
+    r(ZS, "admin.starbridge.example", "A", "192.0.2.10", false),
+    r(ZS, "bi.starbridge.example", "CNAME", `${TUN_SG}.cfargotunnel.com`),
+    r(ZS, "ci.starbridge.example", "A", "192.0.2.150", false),
+    r(ZS, "docs.starbridge.example", "CNAME", "starbridge-docs.pages.dev"),
+    r(ZD, "sak.dev", "CNAME", "sak-dev.pages.dev"),
+    r(ZD, "www.sak.dev", "CNAME", "sak-dev.pages.dev"),
+    r(ZD, "blog.sak.dev", "AAAA", "2001:db8:42::1"),
+    r(ZD, "static.sak.dev", "A", "203.0.113.61"),
+    r(ZD, "nas.sak.dev", "CNAME", `${TUN_HOME}.cfargotunnel.com`),
+  ],
+  registrations: [
+    { name: "starbridge.example", accountId: ACC, status: "active", expiresAt: "2027-12-03", autoRenew: true, locked: true },
+    { name: "sak.dev", accountId: ACC, status: "active", expiresAt: "2027-06-11", autoRenew: true, locked: true },
+    { name: "sak-lab.net", accountId: ACC, status: "active", expiresAt: "2027-02-14", autoRenew: true, locked: true },
+  ],
+  tunnels: [
+    { id: TUN_SG, name: "sg-data", status: "healthy", accountId: ACC, hostnames: ["bi.starbridge.example"], originIps: ["198.51.100.7"], connections: 4 },
+    { id: TUN_HOME, name: "home-lab", status: "healthy", accountId: ACC, hostnames: ["nas.sak.dev"], originIps: ["203.0.113.99"], connections: 2 },
+    { id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", name: "old-relay", status: "inactive", accountId: ACC, hostnames: [], originIps: [], connections: 0 },
+  ],
+  workers: [
+    { name: "edge-router", accountId: ACC, modifiedOn: "2026-10-28", domains: ["edge.sak.dev"] },
+    { name: "og-image", accountId: ACC, modifiedOn: "2026-09-02", domains: [] },
+  ],
+  pages: [
+    { name: "sak-dev", accountId: ACC, subdomain: "sak-dev.pages.dev", domains: ["sak.dev", "www.sak.dev"] },
+    { name: "starbridge-docs", accountId: ACC, subdomain: "starbridge-docs.pages.dev", domains: ["docs.starbridge.example"] },
+  ],
+  r2: [
+    { name: "starbridge-assets", accountId: ACC, location: "APAC", createdAt: "2025-03-02" },
+    { name: "fra-backup-archive", accountId: ACC, location: "WEUR", createdAt: "2025-02-20" },
+  ],
+  sections: { accounts: { state: "ok" }, zones: { state: "ok" }, dns: { state: "ok" }, registrar: { state: "ok" }, tunnels: { state: "ok" }, workers: { state: "ok" }, pages: { state: "ok" }, r2: { state: "ok" } },
+};
+export const demoCfInfo = {
+  enabled: true, hasToken: true, hasAccountId: false, lastSync: CF, lastError: null,
+  token: { kind: "user" as const, status: "active", expiresOn: null, readOnly: true, checkedAt: CF,
+    permissions: ["Account Settings Read", "Zone Read", "DNS Read", "Registrar Domains Read", "Cloudflare Tunnel Read", "Workers Scripts Read", "Pages Read", "Workers R2 Storage Read", "API Tokens Read"] },
+  sections: demoCfSnapshot.sections,
+  counts: { accounts: 1, zones: 4, records: 12, tunnels: 3 },
 };

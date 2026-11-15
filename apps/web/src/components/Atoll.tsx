@@ -2,6 +2,7 @@ import { atollImpact, type AtollMatch, type AtollServer } from "@fangcun/core";
 import clsx from "clsx";
 import type { Asset } from "../data/types";
 import { useData } from "../lib/store";
+import { CfBadge, CfHostLine, useAtollCfCheck, useCfOn } from "./Cloudflare";
 import { Card, Empty } from "./ui";
 
 export function AtollBadge({ className }: { className?: string }) {
@@ -56,6 +57,8 @@ function matchText(m: AtollMatch | undefined, servers: AtollServer[]): string {
 export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect: (id: string) => void }) {
   const { atollView, update, toast } = useData();
   const on = useAtollOn();
+  const cfOn = useCfOn();
+  const cfCheck = useAtollCfCheck();
   if (!on) return null;
   const servers = atollView.servers;
   const m = atollView.match.get(asset.id);
@@ -69,7 +72,7 @@ export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect:
   return (
     <Card title="Atoll 上的项目" flush scroll className="max-h-[380px]"
       extra={<>
-        <AtollBadge />
+        <AtollBadge />{cfOn && <CfBadge />}
         <span className="max-w-[260px] truncate" title={matchText(m, servers)}>{matchText(m, servers)}</span>
         <select value={value} onChange={(e) => bind(e.target.value)} title="选择这台 VPS 对应的 Atoll 服务器"
           className="h-7 max-w-[170px] rounded-[6px] border border-line bg-field px-2 text-xs text-ink outline-none focus:border-ink/40">
@@ -89,10 +92,10 @@ export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect:
           <div className="flex h-10 items-center gap-2 px-4 text-[13px]">
             <span className="truncate font-semibold">{p.name}</span>
             {p.handle !== p.name && <span className="truncate font-mono text-[11.5px] text-subtle">{p.handle}</span>}
-            <span className="ml-auto shrink-0 text-xs text-subtle">{p.services.length} 个服务</span>
+            <span className="ml-auto shrink-0 text-xs whitespace-nowrap text-subtle">{p.services.length} 个服务</span>
           </div>
-          {p.services.map((s) => (
-            <div key={s.id} className="grid min-h-9 grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.4fr)] items-center gap-3 py-1.5 pr-4 pl-7 text-[13px]">
+          {p.services.map((s) => (<div key={s.id}>
+            <div className="grid min-h-9 grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.4fr)] items-center gap-3 py-1.5 pr-4 pl-7 text-[13px]">
               <span className="flex min-w-0 items-center gap-2">
                 <StatusDot status={s.status} />
                 <span className="truncate">{s.name}</span>
@@ -100,7 +103,8 @@ export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect:
               </span>
               <span className="truncate font-mono text-[11.5px] text-subtle" title={s.image}>{s.image || "—"}</span>
               <span className="flex min-w-0 flex-wrap justify-end gap-1">
-                {s.domains.length ? s.domains.map((d) => (
+                {cfOn ? <span className="text-xs whitespace-nowrap text-subtle">{s.domains.length ? `${s.domains.length} 个域名` : "无域名"}</span>
+                : s.domains.length ? s.domains.map((d) => (
                   <button key={d.hostname} disabled={!d.domainAssetId} onClick={() => d.domainAssetId && onSelect(d.domainAssetId)}
                     title={`${d.hostname} · ${DOMAIN_STATUS[d.status] ?? d.status}${d.proxied ? " · Cloudflare 代理" : ""}${d.domainAssetId ? " · 点击打开域名资产" : ""}`}
                     className={clsx("max-w-full truncate rounded-[5px] bg-field px-1.5 py-px font-mono text-[11.5px]", d.domainAssetId ? "text-ink hover:bg-sel hover:underline" : "cursor-default text-muted", d.status !== "active" && "opacity-60")}>
@@ -109,7 +113,15 @@ export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect:
                 )) : <span className="text-xs text-subtle">无域名</span>}
               </span>
             </div>
-          ))}
+            {cfOn && s.domains.map((d) => (
+              <div key={d.hostname} className="grid min-h-8 items-center gap-x-3 gap-y-0.5 py-1 pr-4 pl-11 text-[13px] @xl:grid-cols-[minmax(0,0.9fr)_minmax(0,2.6fr)]">
+                <button disabled={!d.domainAssetId} onClick={() => d.domainAssetId && onSelect(d.domainAssetId)}
+                  title={`${d.hostname} · Atoll ${DOMAIN_STATUS[d.status] ?? d.status}${d.domainAssetId ? " · 点击打开域名资产" : ""}`}
+                  className={clsx("truncate text-left font-mono text-[12px]", d.domainAssetId ? "text-ink hover:underline" : "cursor-default text-muted", d.status !== "active" && "opacity-60")}>{d.hostname}</button>
+                <CfHostLine check={cfCheck(d.hostname, { serverId: p.serverId, serverAssetId: asset.id }, d.proxied)} />
+              </div>
+            ))}
+          </div>))}
           <div className="h-1.5" />
         </div>
       ))}
@@ -121,18 +133,23 @@ export function AtollProjectsCard({ asset, onSelect }: { asset: Asset; onSelect:
 export function AtollDomainCard({ asset, onSelect }: { asset: Asset; onSelect: (id: string) => void }) {
   const { atollView } = useData();
   const on = useAtollOn();
+  const cfOn = useCfOn();
+  const cfCheck = useAtollCfCheck();
   if (!on) return null;
   const hosts = atollView.hostsByDomain.get(asset.id) ?? [];
   return (
     <Card title="指向这个域名的服务" extra={<><AtollBadge />{hosts.length ? `${hosts.length} 个主机名` : null}</>} flush scroll className="max-h-[320px]">
       {hosts.length ? hosts.map((h) => (
-        <div key={h.hostname + h.serviceId} className="grid h-11 shrink-0 grid-cols-[minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_70px] items-center gap-3 border-b border-line px-4 text-[13px] last:border-0">
+        <div key={h.hostname + h.serviceId} className="border-b border-line last:border-0">
+        <div className={clsx("grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 px-4 text-[13px] @2xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_70px] @max-2xl:py-1.5 @max-2xl:[&>*:nth-child(4)]:order-2", cfOn ? "@2xl:h-9 @2xl:pt-1" : "@2xl:h-11")}>
           <span className="truncate font-mono text-[12.5px]" title={h.hostname}>{h.hostname}</span>
           <span className="flex min-w-0 items-center gap-2"><StatusDot status={h.serviceStatus} /><span className="truncate">{h.projectName}<span className="text-subtle"> / {h.serviceName}</span></span></span>
           {h.serverAssetId
             ? <button onClick={() => onSelect(h.serverAssetId!)} className="truncate text-left font-mono text-[12px] text-muted hover:text-ink hover:underline">{h.serverName}</button>
             : <span className="truncate font-mono text-[12px] text-subtle" title="这台 Atoll 服务器没有对应的方寸资产">{h.serverName}</span>}
-          <span className="text-right text-xs text-subtle">{DOMAIN_STATUS[h.status] ?? h.status}</span>
+          <span className="text-right text-xs whitespace-nowrap text-subtle">{DOMAIN_STATUS[h.status] ?? h.status}</span>
+        </div>
+        {cfOn && <div className="flex min-h-7 items-center gap-2 px-4 pb-1"><span className="shrink-0 text-[11px] text-subtle">Cloudflare</span><CfHostLine check={cfCheck(h.hostname, h, h.proxied)} /></div>}
         </div>
       )) : <Empty>Atoll 里没有服务绑定到这个域名或它的子域名。</Empty>}
     </Card>

@@ -1,12 +1,13 @@
 import { CARD_STATUS_LABEL, formatKomariValue, monthsHeld, nextExpiry, paidSoFar, yearlyCost } from "@fangcun/core";
 import clsx from "clsx";
-import { Check, Download, ExternalLink, FileUp, Globe, Lock, Pencil, Trash2, Undo2 } from "lucide-react";
+import { Check, ChevronLeft, Download, ExternalLink, FileUp, Globe, Lock, Pencil, Trash2, Undo2 } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Asset } from "../data/types";
 import { api } from "../lib/api";
 import { cycleLabel, daysUntil, dueLabel, getToday, money, urgency, ymd } from "../lib/fmt";
 import { useData } from "../lib/store";
 import { AtollDomainCard, AtollImpact, AtollProjectsCard } from "./Atoll";
+import { CloudflareDomainCard, CloudflareServerCard } from "./Cloudflare";
 import { NodeStatusCard } from "./NodeStatus";
 import { QuotaCard } from "./Quota";
 import { TeamCard } from "./Team";
@@ -37,7 +38,7 @@ function detailRows(a: Asset): { label: string; value: string; mono?: boolean; s
   return rows;
 }
 
-export function AssetDetail({ asset: a, onSelect, onEdit }: { asset: Asset; mode?: Mode; onSelect: (id: string) => void; onEdit: () => void }) {
+export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: { asset: Asset; mode?: Mode; onSelect: (id: string) => void; onEdit: () => void; onBack?: () => void; className?: string }) {
   const { assets, status, restoreField } = useData();
   const [renewing, setRenewing] = useState(false);
   const today = getToday();
@@ -55,16 +56,17 @@ export function AssetDetail({ asset: a, onSelect, onEdit }: { asset: Asset; mode
   const stat = a.komari ? status[a.komari.uuid] : undefined;
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-[1080px] flex-col gap-4 px-7 py-6">
-          <div className="flex items-center gap-4">
+    <main className={clsx("flex min-w-0 flex-1 flex-col", className)}>
+      <div className="@container flex-1 overflow-y-auto">
+        <div className="mx-auto flex max-w-[1080px] flex-col gap-4 px-7 py-6 max-md:px-4 max-md:py-4">
+          {onBack && <button onClick={onBack} className="-mb-1 flex w-fit items-center gap-1 text-[13px] text-muted hover:text-ink lg:hidden"><ChevronLeft size={16} />资产</button>}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             <TypeIcon type={a.type} size="lg" />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 basis-[220px]">
               <h1 className={clsx("truncate text-[22px] font-bold tracking-tight", a.type === "server" && "font-mono text-[23px]")}>{a.name}</h1>
               <p className="mt-0.5 truncate text-[13px] text-muted">{[a.subtitle, a.provider].filter(Boolean).join(" · ")}{a.tags.length > 0 && <span className="text-subtle"> · {a.tags.map((t) => `#${t}`).join("  ")}</span>}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
               {d <= 30 && <AtollImpact asset={a} />}
               {d <= 30 && <Pill tone={u} dot>{d < 0 ? dueLabel(a) : `${dueLabel(a)}后到期`}</Pill>}
               {a.payment && a.payment.status !== "active" && <Pill tone="none">{CARD_STATUS_LABEL[a.payment.status]}</Pill>}
@@ -74,7 +76,7 @@ export function AssetDetail({ asset: a, onSelect, onEdit }: { asset: Asset; mode
           </div>
 
           {!isAccount && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 @xl:grid-cols-3">
               <Stat label={a.type === "payment" ? "卡片有效期" : "下次续费"}
                 value={<span className={urgencyText[u]}>{a.expiresAt ? (d > 300 ? ymd(a.expiresAt) : ymd(a.expiresAt).slice(5)) : "—"}</span>}
                 foot={a.expiresAt ? `${d < 0 ? `已过期 ${-d} 天` : `还有 ${d} 天`}${a.autoRenew ? " · 自动续费" : ""}` : "长期有效"}
@@ -90,20 +92,22 @@ export function AssetDetail({ asset: a, onSelect, onEdit }: { asset: Asset; mode
 
           {a.komari && <NodeStatusCard asset={a} status={stat} />}
           {a.type === "server" && <AtollProjectsCard asset={a} onSelect={onSelect} />}
+          {a.type === "server" && <CloudflareServerCard asset={a} onSelect={onSelect} />}
+          {a.type === "domain" && <CloudflareDomainCard asset={a} onSelect={onSelect} />}
           {a.type === "domain" && <AtollDomainCard asset={a} onSelect={onSelect} />}
           {a.team && <TeamCard team={a.team} />}
           {a.quota && <QuotaCard quota={a.quota} />}
 
           {/* paired rows: cards side by side always share one height; overflow scrolls inside */}
-          <div className={clsx("grid gap-4", account && !isAccount && "grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]", isAccount && "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
+          <div className={clsx("grid gap-4", account && !isAccount && "@3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]", isAccount && "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
             {isAccount ? <AccountCard account={a} /> : (
               <Card title="详细信息" extra={a.komari ? <><KomariBadge /> 标记的字段来自探针</> : undefined} flush scroll className="max-h-[360px]">
                 {rows.length ? (
-                  <div className="grid grid-cols-2">
+                  <div className="-mb-px grid @lg:grid-cols-2">
                     {rows.map((f, i) => (
-                      <div key={f.label + i} className={clsx("flex h-11 items-center justify-between gap-3 border-line px-4 text-[13px]",
-                        i % 2 === 0 && "border-r", i < rows.length - (rows.length % 2 === 0 ? 2 : 1) && "border-b")}>
-                        <span className="flex shrink-0 items-center gap-1.5 text-subtle">{f.label}{f.synced && <span className="size-1 rounded-full bg-accent" />}</span>
+                      <div key={f.label + i} className={clsx("flex h-11 min-w-0 items-center justify-between gap-3 border-b border-line px-4 text-[13px]",
+                        i % 2 === 0 && "@lg:border-r")}>
+                        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-subtle">{f.label}{f.synced && <span className="size-1 rounded-full bg-accent" />}</span>
                         <span className={clsx("truncate", f.mono && !f.value.includes("@") && "font-mono text-[12.5px]")} title={f.value}>{f.value}</span>
                       </div>
                     ))}
@@ -116,18 +120,18 @@ export function AssetDetail({ asset: a, onSelect, onEdit }: { asset: Asset; mode
           </div>
 
           {!isAccount && (
-            <div className={clsx("grid gap-4", hasSide && "grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]")}>
+            <div className={clsx("grid gap-4", hasSide && "@3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]")}>
               <Card title="续费记录" extra={`${a.renewals.length} 次`} flush scroll className="max-h-[320px]">
                 {a.renewals.length ? a.renewals.map((r, i) => (
                   <div key={r.date + i} className="flex h-11 shrink-0 items-center gap-4 border-b border-line px-4 text-[13px] last:border-0">
-                    <span className="w-24 text-subtle tnum">{ymd(r.date)}</span>
+                    <span className="w-24 shrink-0 whitespace-nowrap text-subtle tnum">{ymd(r.date)}</span>
                     <span className="flex-1 truncate text-muted">{r.note}{r.to ? <span className="text-subtle"> · 到期改为 {ymd(r.to)}</span> : null}</span>
-                    <span className="font-medium tnum">{money(r.amount, r.currency ?? a.currency)}</span>
+                    <span className="shrink-0 font-medium whitespace-nowrap tnum">{money(r.amount, r.currency ?? a.currency)}</span>
                   </div>
                 )) : <Empty>还没有记录。点「标记已续费」会推进到期日并记一条。</Empty>}
               </Card>
               {hasSide && (
-                <div className="flex max-h-[320px] min-h-0 flex-col gap-4 [&>*:last-child]:flex-1">
+                <div className="flex min-h-0 flex-col gap-4 @3xl:max-h-[320px] @3xl:[&>*:last-child]:flex-1">
                   {a.note && <Card title="备注" scroll className="shrink-0 max-h-[50%]"><p className="text-[13px] leading-relaxed whitespace-pre-wrap text-muted">{a.note}</p></Card>}
                   {links.length > 0 && <LinkCard title={a.type === "payment" ? "用这张卡付款" : "关联"} links={links} onSelect={onSelect} />}
                 </div>
@@ -151,7 +155,7 @@ function LinkCard({ title, links, onSelect }: { title: string; links: Asset[]; o
         <button key={r.id} onClick={() => onSelect(r.id)} className="flex h-12 w-full shrink-0 items-center gap-3 border-b border-line px-4 text-left last:border-0 hover:bg-field/60">
           <TypeIcon type={r.type} size="sm" />
           <span className="flex-1 truncate text-[13px] font-medium">{r.name}</span>
-          <span className={clsx("text-xs tnum", urgencyText[urgency(r)])}>{dueLabel(r)}</span>
+          <span className={clsx("shrink-0 text-xs whitespace-nowrap tnum", urgencyText[urgency(r)])}>{dueLabel(r)}</span>
         </button>
       )) : <Empty>暂无</Empty>}
     </Card>
@@ -162,10 +166,10 @@ function Stat({ label, value, foot, override, synced }: { label: string; value: 
   return (
     <div className="rounded-md border border-line bg-panel px-4 pt-3.5 pb-3">
       <div className="flex items-center gap-1.5 text-xs text-muted">{label}{synced && !override && <span className="size-1 rounded-full bg-accent" title="来自 Komari" />}</div>
-      <div className="mt-1.5 truncate text-[26px] font-bold tracking-tight tnum">{value}</div>
+      <div className="mt-1.5 truncate text-[24px] font-bold tracking-tight whitespace-nowrap tnum @4xl:text-[26px]">{value}</div>
       {override ? (
         <div className="mt-1 flex items-center gap-1.5 text-xs">
-          <span className="rounded-[5px] bg-warn-soft px-1.5 py-px font-medium text-warn">已手动修改</span>
+          <span className="shrink-0 rounded-[5px] bg-warn-soft px-1.5 py-px font-medium whitespace-nowrap text-warn">已手动修改</span>
           <span className="truncate text-subtle">Komari{override.changed ? " 已变为" : ""}: {override.text}</span>
           <button onClick={override.onRestore} title="恢复为 Komari 的值" className="ml-auto grid size-5 place-items-center rounded text-subtle hover:bg-field hover:text-ink"><Undo2 size={13} /></button>
         </div>
@@ -183,13 +187,13 @@ function AccountCard({ account, compact, onOpen }: { account: Asset; compact?: b
       <div className="flex flex-col gap-2 text-[13px]">
         <Row label="账号" value={info?.username || "—"} />
         <div className="flex items-center gap-2 rounded-sm bg-field px-3 py-2">
-          <span className="w-8 shrink-0 text-xs text-subtle">密码</span>
-          <span className="flex-1 text-xs text-subtle">网页版不保存密码</span>
-          <span className="flex items-center gap-1 text-xs text-subtle" title="端到端加密的密码保险库在 v0.2 提供"><Lock size={12} />v0.2 保险库</span>
+          <span className="w-8 shrink-0 text-xs whitespace-nowrap text-subtle">密码</span>
+          <span className="min-w-0 flex-1 text-xs text-subtle">网页版不保存密码</span>
+          <span className="flex shrink-0 items-center gap-1 text-xs whitespace-nowrap text-subtle" title="端到端加密的密码保险库在 v0.2 提供"><Lock size={12} />v0.2 保险库</span>
         </div>
         {info?.hasTotp && <div className="flex items-center gap-2 rounded-sm bg-field px-3 py-2">
           <span className="w-8 shrink-0 text-xs text-subtle">2FA</span>
-          <span className="flex-1 text-xs text-muted">这个账号开了两步验证</span>
+          <span className="min-w-0 flex-1 truncate text-xs text-muted">这个账号开了两步验证</span>
         </div>}
       </div>
       {(info?.websites?.length ?? 0) > 0 && (

@@ -38,7 +38,7 @@
 
 - 端口：容器 `8080`
 - 数据卷：容器 `/data`（数据库、附件、自动备份都在这里，务必挂载）
-- 环境变量（可选）：`KOMARI_API_KEY`（Komari 管理员 API Key，只读使用）、`ATOLL_API_KEY`（Atoll 只读令牌，见下文「Atoll 接入」）、`TZ=Asia/Shanghai`、`COOKIE_SECURE=1`（走 HTTPS 反代时）
+- 环境变量（可选）：`KOMARI_API_KEY`（Komari 管理员 API Key，只读使用）、`ATOLL_API_KEY`（Atoll 只读令牌，见下文「Atoll 接入」）、`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`（Cloudflare 只读令牌，见下文「Cloudflare 接入」）、`TZ=Asia/Shanghai`、`COOKIE_SECURE=1`（走 HTTPS 反代时）
 
 或用 compose：
 
@@ -47,6 +47,7 @@ mkdir fangcun && cd fangcun
 curl -fsSLO https://raw.githubusercontent.com/Sakuralaaa/fangcun/main/docker-compose.yml
 echo "KOMARI_API_KEY=你的 Komari API Key" > .env   # 可选
 echo "ATOLL_API_KEY=atl_pat_你的只读令牌" >> .env    # 可选
+echo "CLOUDFLARE_API_TOKEN=你的只读令牌" >> .env     # 可选
 docker compose up -d
 ```
 
@@ -84,6 +85,8 @@ FANGCUN_DATA_DIR=./data KOMARI_API_KEY=xxx npm start   # http://localhost:8080
 | `FANGCUN_BACKUP_DIR` | `$FANGCUN_DATA_DIR/backups` | 自动备份目录 |
 | `KOMARI_API_KEY` | — | Komari 管理员 API Key，只放在服务端，不进数据库、不进备份 |
 | `ATOLL_API_KEY` | — | Atoll 的**只读（read）**API 令牌（`atl_pat_…`），只放在服务端，不进数据库、不进备份、不发给浏览器 |
+| `CLOUDFLARE_API_TOKEN` | — | Cloudflare 的**只读**API 令牌（只勾 Read 权限），只放在服务端，不进数据库、不进备份、不发给浏览器、不写日志 |
+| `CLOUDFLARE_ACCOUNT_ID` | — | 可选。只读这个账户；账户令牌（`cfat_…`）必须设置 |
 | `COOKIE_SECURE` | 自动 | `1` 强制 Secure cookie，`0` 关闭 |
 | `TZ` | 系统 | 每日自动备份按此时区判断日期 |
 
@@ -205,16 +208,42 @@ Atoll 是自托管的多 VPS 容器面板。方寸只读取它的服务器、项
 - **服务域名 ↔ 域名资产**：按后缀匹配，取最长的那个：`blog.example.com` → 域名资产 `example.com`；同时有 `shop.example.com` 资产时 `api.shop.example.com` 归它。
 - 关联是即时算出来的视图，**不写进资产的「关联」，也不改任何手填数据**。
 
+## Cloudflare 接入（只读）
+
+方寸只读读取 Cloudflare 的 zone、A / AAAA / CNAME 记录、注册商域名、Tunnel、Workers、Pages 和 R2，和台账里的域名、VPS、Atoll 项目对上号。不改 Cloudflare 上的任何东西。
+
+**部署步骤：**
+
+1. Cloudflare 面板 → 右上角头像「我的个人资料」→「API 令牌」→「创建令牌」→「创建自定义令牌」，**全部选 Read**：
+   - 账户：Account Settings · Read（设置了 `CLOUDFLARE_ACCOUNT_ID` 可不勾）、Registrar Domains · Read、Cloudflare Tunnel · Read、Workers Scripts · Read、Cloudflare Pages · Read、Workers R2 Storage · Read
+   - 区域：Zone · Read、DNS · Read（区域资源选「所有区域」或指定区域）
+   - 用户（可选）：API Tokens · Read —— 让方寸核对令牌自身是否只读；不勾则设置页提示你自检
+2. 设为服务端环境变量 `CLOUDFLARE_API_TOKEN`（可选 `CLOUDFLARE_ACCOUNT_ID`），重启容器。
+3. 「设置 → Cloudflare」点「立即同步」。之后每 10 分钟最多自动刷新一次。
+
+**安全约束：**
+
+- 服务端客户端**只能发 GET**，路径与查询参数都有白名单（`/user/tokens/verify`、`/accounts`、`/zones`、`/zones/{id}/dns_records`、`/accounts/{id}/registrar/registrations`（旧 `/registrar/domains` 兜底）、`/cfd_tunnel` 及其 `configurations` / `connections`、`/workers/scripts`、`/workers/domains`、`/pages/projects`、`/r2/buckets`；查询参数只允许 `page` / `per_page` / `cursor` / `is_deleted=false`），其他请求在发出前就被拒绝（有单测覆盖）。
+- 每次同步先校验令牌；能读到令牌权限时，**含任何 Edit / Write（以及 Purge、Revoke、Run 这类动作）就拒绝使用**；读不到时照常同步并提醒你自检。
+- 缺某项权限只把那一项标为「未授权」，其他照常。只存一份精简快照，TXT / MX 等记录、令牌、凭据一到就丢弃。
+
+**怎么对上号（只是视图，不写进资产）：**
+
+- zone ↔ 域名资产按域名匹配；在 Cloudflare 注册的域名，到期日与自动续费作为「来自 Cloudflare」的建议值显示，点「采纳」才写入，之后仍可在方寸里改。没有对应资产的 zone 在设置页列出，点「导入」才建域名资产。
+- A / AAAA 记录按公网 IP 对应唯一一台 VPS（IP 写在多台机器上就不猜）；CNAME 指向 `*.cfargotunnel.com` 的记录对应到 Tunnel，再按 Tunnel 连接的来源 IP 对应 VPS。
+- Atoll 项目卡和域名详情里显示每个主机名在 Cloudflare 的记录、是否代理、是否走 Tunnel，并标出不一致（没有记录、记录指向的不是项目所在服务器、Tunnel 跑在别的机器上）。
+- Workers、Pages、R2 只显示，不建资产；它们的自定义域名会挂到对应的域名资产上。
+
 ## 项目结构
 
 ```
-packages/core   类型与 schema 版本、到期 / 紧急度 / 费用计算、Komari 字段映射、Atoll 关联（IP / 域名后缀匹配）、备份格式、CSV / ICS、doctor、权限判定
-apps/server     Node 22 + Hono + node:sqlite；迁移、登录 / 会话 / TOTP、令牌、变更计划、审计与撤销、Komari 只读转发、Atoll 只读快照、备份
+packages/core   类型与 schema 版本、到期 / 紧急度 / 费用计算、Komari 字段映射、Atoll / Cloudflare 关联（IP / 域名后缀 / Tunnel 匹配）、备份格式、CSV / ICS、doctor、权限判定
+apps/server     Node 22 + Hono + node:sqlite；迁移、登录 / 会话 / TOTP、令牌、变更计划、审计与撤销、Komari 只读转发、Atoll 与 Cloudflare 只读快照、备份
 apps/web        React 19 + Vite + Tailwind v4 + lucide；?demo=1 为演示模式
 apps/cli        fangcun 命令与 stdio MCP server（esbuild 打成单文件）
 ```
 
-测试（vitest）覆盖：到期与费用计算、支付卡 / 号码校验、Komari 映射与手改保护（伪造的 1.2.5 响应）、Atoll 只读白名单与非只读令牌拒绝、IP / 域名后缀匹配与手动绑定优先、备份往返与篡改检测、schema 迁移、令牌三档权限与审批流程、撤销与回收站、2FA 二次验证、MCP 协议。
+测试（vitest）覆盖：到期与费用计算、支付卡 / 号码校验、Komari 映射与手改保护（伪造的 1.2.5 响应）、Atoll / Cloudflare 只读白名单与非只读令牌拒绝、Cloudflare 分页与单项降级、IP / 域名后缀匹配与手动绑定优先、备份往返与篡改检测、schema 迁移、令牌三档权限与审批流程、撤销与回收站、2FA 二次验证、MCP 协议。
 
 ## 路线图
 

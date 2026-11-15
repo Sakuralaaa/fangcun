@@ -1,6 +1,6 @@
 /** Data schema version. Bump together with a migration in backup.ts. */
 export const SCHEMA_VERSION = 2;
-export const APP_VERSION = "0.1.4";
+export const APP_VERSION = "0.1.5";
 
 export const ASSET_TYPES = [
   "server", "domain", "cert", "subscription", "mail", "phone", "payment", "account", "document",
@@ -240,11 +240,18 @@ export interface AtollSettings {
   intervalMin: number;
 }
 
+/**
+ * Cloudflare (read-only). The API token only comes from the server's CLOUDFLARE_API_TOKEN environment variable
+ * (optional CLOUDFLARE_ACCOUNT_ID); it is never stored, sent to the browser or logged.
+ */
+export interface CloudflareSettings { enabled: boolean }
+
 export interface Settings {
   komari: KomariSettings;
   display: DisplaySettings;
   backup: BackupSettings;
   atoll: AtollSettings;
+  cloudflare: CloudflareSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -256,6 +263,7 @@ export const DEFAULT_SETTINGS: Settings = {
   display: { currency: "USD", rates: { USD: 1, CNY: 7.2, HKD: 7.8, EUR: 0.92, GBP: 0.79, JPY: 150 }, autoRates: true },
   backup: { keep: 30, hour: 4 },
   atoll: { enabled: true, url: "", intervalMin: 15 },
+  cloudflare: { enabled: true },
 };
 
 /** The JSON document inside a .fangcun backup and the JSON export. */

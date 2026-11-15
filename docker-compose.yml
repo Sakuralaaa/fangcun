@@ -12,6 +12,9 @@ services:
       KOMARI_API_KEY: ${KOMARI_API_KEY:-}
       # Atoll 只读 API 令牌（在 Atoll「连接 → API 令牌」创建，权限选「只读」）；不接 Atoll 可删掉这一行
       ATOLL_API_KEY: ${ATOLL_API_KEY:-}
+      # Cloudflare 只读 API 令牌（只勾 Read 权限，见 README「Cloudflare 接入」）；不接 Cloudflare 可删掉这两行
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
       # 放在 HTTPS 反向代理后面时设为 1，会话 cookie 带 Secure
       COOKIE_SECURE: ${COOKIE_SECURE:-}
     volumes:

@@ -26,15 +26,14 @@ function WorkspaceBlock({ w }: { w: Workspace }) {
   const meta = [w.region, w.discount, `${used}/${w.seats} 席`, w.seats ? `人均 ${money(Math.round(perSeat(w.price, w.seats) * 10) / 10, w.currency)}` : ""].filter(Boolean).join(" · ");
   return (
     <div className="border-t border-line px-4 pt-3 pb-2">
-      <div className="flex items-baseline gap-3">
-        <span className="text-[14px] font-semibold">{w.name}</span>
-        <span className="truncate text-xs text-subtle">{meta}</span>
-        <div className="flex-1" />
-        <span className="text-[13px] tnum">{money(w.price, w.currency)}<span className="text-subtle">/{cycleLabel[w.cycle]}</span></span>
-        <span className={clsx("w-[70px] text-right text-xs tnum", d <= 7 ? "font-semibold text-crit" : d <= 14 ? "font-semibold text-warn" : "text-subtle")}>{w.expiresAt ? `${ymd(w.expiresAt).slice(5)} 到期` : "—"}</span>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+        <span className="shrink-0 text-[14px] font-semibold whitespace-nowrap">{w.name}</span>
+        <span className="min-w-0 flex-1 basis-[140px] truncate text-xs text-subtle">{meta}</span>
+        <span className="shrink-0 text-[13px] whitespace-nowrap tnum">{money(w.price, w.currency)}<span className="text-subtle">/{cycleLabel[w.cycle]}</span></span>
+        <span className={clsx("w-[76px] shrink-0 text-right text-xs whitespace-nowrap tnum", d <= 7 ? "font-semibold text-crit" : d <= 14 ? "font-semibold text-warn" : "text-subtle")}>{w.expiresAt ? `${ymd(w.expiresAt).slice(5)} 到期` : "—"}</span>
       </div>
       {members.length > 0 && (
-        <div className={clsx("mt-2 grid items-center gap-x-6 text-xs text-subtle", hasQuota ? "grid-cols-[minmax(0,1fr)_120px_120px]" : "grid-cols-1")}>
+        <div className={clsx("mt-2 grid items-center gap-x-6 text-xs text-subtle", hasQuota ? "grid-cols-[minmax(0,1fr)_88px_88px] @lg:grid-cols-[minmax(0,1fr)_120px_120px]" : "grid-cols-1")}>
           <span>成员</span>{hasQuota && <><span>5 小时剩余</span><span>每周剩余</span></>}
         </div>
       )}
@@ -46,7 +45,7 @@ function WorkspaceBlock({ w }: { w: Workspace }) {
 
 function MemberRow({ m, quota }: { m: TeamMember; quota: boolean }) {
   return (
-    <div className={clsx("grid h-9 items-center gap-x-6 text-[13px]", quota ? "grid-cols-[minmax(0,1fr)_120px_120px]" : "grid-cols-[minmax(0,1fr)_auto]")}>
+    <div className={clsx("grid h-9 items-center gap-x-6 text-[13px]", quota ? "grid-cols-[minmax(0,1fr)_88px_88px] @lg:grid-cols-[minmax(0,1fr)_120px_120px]" : "grid-cols-[minmax(0,1fr)_auto]")}>
       <span className="truncate">{m.email}</span>
       {quota ? (m.quota ? m.quota.map((q) => <Meter key={q.label} left={100 - q.usedPct} />) : <span className="col-span-2 text-xs text-subtle">未关联号池账号</span>)
         : <span className="text-xs text-subtle">{m.note ?? ""}</span>}

@@ -32,7 +32,7 @@ export function nodeView(a: Asset, s?: NodeStatus) {
 export type NodeView = ReturnType<typeof nodeView>;
 
 function Label({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
-  return <span className="flex min-w-0 items-center gap-1.5 text-[12px] whitespace-nowrap text-muted"><Icon size={13} strokeWidth={2} className="shrink-0 text-subtle" />{children}</span>;
+  return <span className="flex shrink-0 items-center gap-1.5 text-[12px] whitespace-nowrap text-muted"><Icon size={13} strokeWidth={2} className="shrink-0 text-subtle" />{children}</span>;
 }
 
 export function Chip({ children, className }: { children: ReactNode; className?: string }) {
@@ -94,7 +94,7 @@ export function TotalCell({ dir, v }: { dir: "up" | "down"; v: NodeView }) {
   return (
     <div className="flex min-w-0 items-baseline justify-between gap-2">
       <Label icon={Globe}>{dir === "up" ? "出站" : "入站"}</Label>
-      <span className="text-[13px] text-ink tnum">{s ? bytes(dir === "up" ? s.totalUp : s.totalDown) : "—"}</span>
+      <span className="min-w-0 truncate text-[13px] whitespace-nowrap text-ink tnum">{s ? bytes(dir === "up" ? s.totalUp : s.totalDown) : "—"}</span>
     </div>
   );
 }
@@ -106,11 +106,11 @@ export function QuotaRow({ v, label = "剩余流量", right, n = 24 }: { v: Node
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="flex min-w-0 items-baseline gap-2">
+        <span className="flex shrink-0 items-baseline gap-2">
           <Label icon={Database}>{label}</Label>
-          <span className={clsx("text-[13px] font-semibold tnum", usageText(v.trafficPct))}>{unlimited ? "∞" : bytes(remain)}</span>
+          <span className={clsx("text-[13px] font-semibold whitespace-nowrap tnum", usageText(v.trafficPct))}>{unlimited ? "∞" : bytes(remain)}</span>
         </span>
-        <span className="truncate text-[12px] text-muted tnum">{right ?? <>{v.s ? bytes(v.used) : "—"} / {unlimited ? "∞" : bytes(v.limit)}</>}</span>
+        <span className="min-w-0 truncate text-[12px] whitespace-nowrap text-muted tnum">{right ?? <>{v.s ? bytes(v.used) : "—"} / {unlimited ? "∞" : bytes(v.limit)}</>}</span>
       </div>
       <SegBar className="mt-2" value={v.trafficPct} tone={usageTone(v.trafficPct, "bg-ok")} n={n} h="h-[6px]" />
     </div>
@@ -126,14 +126,14 @@ export function PingCells({ ping, compact }: { ping?: NodePing; compact?: boolea
       <div className="min-w-0">
         <div className="flex items-baseline justify-between gap-2">
           <Label icon={Timer}>延迟</Label>
-          {ping ? <Num v={ms ?? "—"} u={ms === null ? undefined : "ms"} className={clsx("text-[14px] font-semibold", latencyText(ms))} /> : <span className="text-[12px] text-subtle">未配置</span>}
+          {ping ? <Num v={ms ?? "—"} u={ms === null ? undefined : "ms"} className={clsx("text-[14px] font-semibold", latencyText(ms))} /> : <span className="text-[12px] whitespace-nowrap text-subtle">未配置</span>}
         </div>
         <LatencyBars buckets={b} className="mt-2" h={compact ? 12 : 16} />
       </div>
       <div className="min-w-0">
         <div className="flex items-baseline justify-between gap-2">
           <Label icon={Unlink}>丢包率</Label>
-          {ping ? <Num v={pctLabel(ping.loss)} u="%" className={clsx("text-[14px] font-semibold", lossText(ping.loss))} /> : <span className="text-[12px] text-subtle">未配置</span>}
+          {ping ? <Num v={pctLabel(ping.loss)} u="%" className={clsx("text-[14px] font-semibold", lossText(ping.loss))} /> : <span className="text-[12px] whitespace-nowrap text-subtle">未配置</span>}
         </div>
         <LossBars buckets={b} className="mt-2" h={compact ? 12 : 16} />
       </div>

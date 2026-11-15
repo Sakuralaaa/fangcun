@@ -7,7 +7,7 @@ import { daysUntil, dueLabel, urgency } from "../lib/fmt";
 import { useData } from "../lib/store";
 import { TypeIcon, typeMeta, urgencyText } from "./ui";
 
-export function AssetList({ selected, filter, onSelect, onFilter, onAdd }: { selected?: string; filter: AssetType | "all"; onSelect: (id: string) => void; onFilter: (t: AssetType | "all") => void; onAdd: () => void }) {
+export function AssetList({ selected, filter, onSelect, onFilter, onAdd, className }: { selected?: string; filter: AssetType | "all"; onSelect: (id: string) => void; onFilter: (t: AssetType | "all") => void; onAdd: () => void; className?: string }) {
   const { assets, status, settings } = useData();
   const [q, setQ] = useState("");
   const input = useRef<HTMLInputElement>(null);
@@ -23,7 +23,7 @@ export function AssetList({ selected, filter, onSelect, onFilter, onAdd }: { sel
   const total = displayTotal(monthlyByCurrency(assets), settings.display);
 
   return (
-    <section className="flex w-[384px] shrink-0 flex-col border-r border-line bg-panel">
+    <section className={clsx("flex min-w-0 shrink-0 flex-col border-line bg-panel max-lg:flex-1 lg:w-[320px] lg:border-r xl:w-[384px]", className)}>
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-center justify-between">
           <h2 className="text-[17px] font-bold tracking-tight">资产</h2>
@@ -35,10 +35,10 @@ export function AssetList({ selected, filter, onSelect, onFilter, onAdd }: { sel
           <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索名称、IP、标签、末四位" className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-subtle" />
           <kbd className="font-sans text-[11px]">⌘K</kbd>
         </label>
-        <div className="-mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">
-          <Chip on={filter === "all"} onClick={() => onFilter("all")}>全部 {assets.length}</Chip>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Chip on={filter === "all"} onClick={() => onFilter("all")}>全部<Count n={assets.length} on={filter === "all"} /></Chip>
           {ASSET_TYPES.filter((t) => counts[t]).map((t) => (
-            <Chip key={t} on={filter === t} onClick={() => onFilter(t)}>{typeMeta[t].label} {counts[t]}</Chip>
+            <Chip key={t} on={filter === t} onClick={() => onFilter(t)}>{typeMeta[t].label}<Count n={counts[t]} on={filter === t} /></Chip>
           ))}
         </div>
       </div>
@@ -55,9 +55,13 @@ export function AssetList({ selected, filter, onSelect, onFilter, onAdd }: { sel
 
 function Chip({ on, children, onClick }: { on?: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={clsx("inline-flex h-[26px] shrink-0 items-center rounded-full border px-2.5 text-xs whitespace-nowrap tnum transition-colors",
+    <button onClick={onClick} aria-current={on ? "true" : undefined} className={clsx("inline-flex h-[26px] shrink-0 items-center gap-1 rounded-full border px-2.5 text-xs whitespace-nowrap transition-colors",
       on ? "border-ink bg-ink font-medium text-bg" : "border-line text-muted hover:bg-field")}>{children}</button>
   );
+}
+
+function Count({ n, on }: { n: number; on: boolean }) {
+  return <span className={clsx("tnum", on ? "text-bg/70" : "text-subtle")}>{n}</span>;
 }
 
 function Group({ title, count }: { title: string; count: number }) {
@@ -83,8 +87,8 @@ function Row({ a, on, onClick, online }: { a: Asset; on: boolean; onClick: () =>
         </div>
         <div className="truncate text-xs text-subtle">{a.subtitle || (card ? `${card.network ?? ""} ···· ${card.last4}` : a.provider)}</div>
       </div>
-      <div className="text-right">
-        <div className={clsx("text-[12.5px] tnum", u === "crit" || u === "warn" ? "font-semibold" : "", urgencyText[u])}>{card?.status === "frozen" ? "冻结" : dueLabel(a)}</div>
+      <div className="shrink-0 text-right">
+        <div className={clsx("text-[12.5px] whitespace-nowrap tnum", u === "crit" || u === "warn" ? "font-semibold" : "", urgencyText[u])}>{card?.status === "frozen" ? "冻结" : dueLabel(a)}</div>
       </div>
     </button>
   );

@@ -110,6 +110,7 @@ export function mergeSettings(s?: Partial<Settings>): Settings {
     display: { ...d.display, ...s.display, rates: { ...d.display.rates, ...s.display?.rates } },
     backup: { ...d.backup, ...s.backup },
     atoll: { ...d.atoll, ...s.atoll },
+    cloudflare: { ...d.cloudflare, ...s.cloudflare },
   };
 }
 

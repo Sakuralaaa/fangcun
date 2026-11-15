@@ -1,6 +1,6 @@
-import { buildAtollView, DEFAULT_SETTINGS, normalizeAsset, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type PingState, type Settings } from "@fangcun/core";
+import { buildAtollView, buildCloudflareView, DEFAULT_SETTINGS, normalizeAsset, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type CfSection, type CfSectionState, type CfSnapshot, type CfView, type PingState, type Settings } from "@fangcun/core";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { demoAssets, demoAtollInfo, demoAtollSnapshot, demoKomariInfo, demoSettings, demoStatus, DEMO_TODAY } from "../data/mock";
+import { demoAssets, demoAtollInfo, demoAtollSnapshot, demoCfInfo, demoCfSnapshot, demoKomariInfo, demoSettings, demoStatus, DEMO_TODAY } from "../data/mock";
 import type { Asset, StatusMap } from "../data/types";
 import { api, get, post } from "./api";
 import { getToday, setToday } from "./fmt";
@@ -10,6 +10,12 @@ export interface AtollInfo {
   enabled: boolean; url: string; hasKey: boolean; lastSync: string | null; lastError: string | null;
   projects: number | null; servers: number | null;
   key: { readOnly: boolean | null; permissions?: string[]; projectScoped?: boolean; checkedAt: string } | null;
+}
+export interface CfInfo {
+  enabled: boolean; hasToken: boolean; hasAccountId: boolean; lastSync: string | null; lastError: string | null;
+  token: { kind: "user" | "account"; status: string; expiresOn?: string | null; readOnly: boolean | null; permissions?: string[]; checkedAt: string } | null;
+  sections: Record<CfSection, CfSectionState> | null;
+  counts: { accounts: number; zones: number; records: number; tunnels: number } | null;
 }
 export interface Me { username: string; totpEnabled: boolean }
 
@@ -32,6 +38,11 @@ interface Ctx {
   /** Links between assets and Atoll, derived on the fly (never stored on assets). */
   atollView: AtollView;
   reloadAtoll: () => Promise<void>;
+  cf: CfInfo | null;
+  cfSnap: CfSnapshot | null;
+  /** Links between assets and Cloudflare (zones, records, tunnels), derived on the fly; never stored on assets. */
+  cfView: CfView;
+  reloadCloudflare: () => Promise<void>;
   loading: boolean;
   backupError: string | null;
   reload: () => Promise<void>;
@@ -65,6 +76,8 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   const [komari, setKomari] = useState<KomariInfo | null>(demo ? demoKomariInfo : null);
   const [atoll, setAtoll] = useState<AtollInfo | null>(demo ? demoAtollInfo : null);
   const [atollSnap, setAtollSnap] = useState<AtollSnapshot | null>(demo ? demoAtollSnapshot : null);
+  const [cf, setCf] = useState<CfInfo | null>(demo ? demoCfInfo : null);
+  const [cfSnap, setCfSnap] = useState<CfSnapshot | null>(demo ? demoCfSnapshot : null);
   const [loading, setLoading] = useState(!demo);
   const [backupError, setBackupError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string; tone: "ok" | "err" }[]>([]);
@@ -85,9 +98,20 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
     setAtollSnap(s?.snapshot ?? null);
   }, [demo]);
 
+  const reloadCloudflare = useCallback(async () => {
+    if (demo) return;
+    const [i, s] = await Promise.all([
+      get<CfInfo>("/api/cloudflare/info").catch(() => null),
+      get<{ snapshot: CfSnapshot | null }>("/api/cloudflare/snapshot").catch(() => null),
+    ]);
+    setCf(i);
+    setCfSnap(s?.snapshot ?? null);
+  }, [demo]);
+
   const reload = useCallback(async () => {
     if (demo) return;
     reloadAtoll().catch(() => {});
+    reloadCloudflare().catch(() => {});
     const [a, s, k, b] = await Promise.all([
       get<{ assets: Asset[]; today: string }>("/api/assets"),
       get<{ settings: Settings }>("/api/settings"),
@@ -100,7 +124,7 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
     setKomari(k);
     setBackupError(b?.lastError ?? null);
     setLoading(false);
-  }, [demo]);
+  }, [demo, reloadAtoll, reloadCloudflare]);
 
   const refreshStatus = useCallback(async () => {
     if (demo) return;
@@ -176,11 +200,12 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   }, [demo, toast]);
 
   const atollView = useMemo(() => buildAtollView(assets, settings.atoll.enabled ? atollSnap : null), [assets, atollSnap, settings.atoll.enabled]);
+  const cfView = useMemo(() => buildCloudflareView(assets, settings.cloudflare.enabled ? cfSnap : null, atollView), [assets, cfSnap, settings.cloudflare.enabled, atollView]);
 
   const value = useMemo<Ctx>(() => ({
-    demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, loading, backupError, reload, refreshStatus,
+    demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, loading, backupError, reload, refreshStatus,
     create, update, renew, remove, restoreField, saveSettings, toast, setMe,
-  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, loading, backupError, reload, refreshStatus, create, update, renew, remove, restoreField, saveSettings, toast]);
+  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, loading, backupError, reload, refreshStatus, create, update, renew, remove, restoreField, saveSettings, toast]);
 
   return (
     <C.Provider value={value}>

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { CreditCard, FileText, Globe, KeyRound, Mail, Server, ShieldCheck, Smartphone, Sparkles, X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AssetType } from "../data/types";
 import type { Urgency } from "../lib/fmt";
 
@@ -62,13 +62,17 @@ export function Button({ children, variant = "default", icon, className, onClick
   );
 }
 
+/**
+ * A card. The body is a size container (`@container`), so rows inside lay out by the card's own width, not the window's.
+ * The header keeps the title whole: when title + extra do not fit on one line, the extra wraps under it.
+ */
 export function Card({ title, extra, children, className, flush, scroll }: { title?: ReactNode; extra?: ReactNode; children: ReactNode; className?: string; flush?: boolean; scroll?: boolean }) {
   return (
-    <section className={clsx("flex min-h-0 flex-col overflow-hidden rounded-md border border-line bg-panel", className)}>
+    <section className={clsx("@container flex min-h-0 flex-col overflow-hidden rounded-md border border-line bg-panel", className)}>
       {title && (
-        <header className="flex h-11 shrink-0 items-center justify-between gap-3 px-4">
-          <h3 className="truncate text-[13.5px] font-semibold">{title}</h3>
-          {extra && <div className="flex shrink-0 items-center gap-2 text-xs text-subtle">{extra}</div>}
+        <header className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
+          <h3 className="max-w-full min-w-0 shrink-0 truncate text-[13.5px] font-semibold whitespace-nowrap">{title}</h3>
+          {extra && <div className="ml-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs whitespace-nowrap text-subtle">{extra}</div>}
         </header>
       )}
       <div className={clsx(flush ? "" : title ? "px-4 pb-4" : "p-4", scroll && "min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]")}>{children}</div>
@@ -157,4 +161,44 @@ export function Toggle({ on, onChange, disabled }: { on: boolean; onChange?: (v:
 
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="px-4 pb-4 text-[13px] text-subtle">{children}</p>;
+}
+
+/**
+ * A single row of chips or tabs that never clips silently: it scrolls sideways (wheel works too, scrollbar hidden),
+ * fades out at whichever edge has more to show, and brings the active item (`aria-current`) into view.
+ */
+export function ScrollRow({ children, className, activeKey }: { children: ReactNode; className?: string; activeKey?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState({ l: false, r: false });
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const l = el.scrollLeft > 2;
+    const r = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+    setEdge((e) => (e.l === l && e.r === r ? e : { l, r }));
+  }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>('[aria-current="true"]');
+    if (active) {
+      const left = active.offsetLeft - el.offsetLeft;
+      if (left < el.scrollLeft || left + active.offsetWidth > el.scrollLeft + el.clientWidth) el.scrollLeft = Math.max(0, left - 24);
+    }
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    for (const c of Array.from(el.children)) ro.observe(c);
+    return () => ro.disconnect();
+  }, [update, activeKey]);
+  const fade = 28;
+  const mask = `linear-gradient(to right, transparent 0, #000 ${edge.l ? fade : 0}px, #000 calc(100% - ${edge.r ? fade : 0}px), transparent 100%)`;
+  return (
+    <div ref={ref} onScroll={update}
+      onWheel={(e) => { const el = ref.current; if (el && el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY; }}
+      className={clsx("flex overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)}
+      style={{ maskImage: mask, WebkitMaskImage: mask }}>
+      {children}
+    </div>
+  );
 }

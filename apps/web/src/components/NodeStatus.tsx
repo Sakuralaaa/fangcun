@@ -21,7 +21,7 @@ export function NodeStatusCard({ asset, status: s }: { asset: Asset; status?: No
   const head = (
     <span className="flex items-center gap-2.5">
       运行状态
-      <span className="flex items-center gap-1.5 text-xs font-normal text-muted">
+      <span className="flex items-center gap-1.5 text-xs font-normal whitespace-nowrap text-muted">
         <span className={clsx("size-1.5 rounded-full", v.on ? "bg-ok" : "bg-subtle")} />{s ? (v.on ? "在线" : "离线") : "未获取"}
       </span>
     </span>
@@ -43,8 +43,8 @@ export function NodeStatusCard({ asset, status: s }: { asset: Asset; status?: No
           {s ? "节点离线，下面是最后一次同步到的数据。" : "还没有拿到这个节点的状态（探针未连接或节点不存在）。"}
         </p>
       )}
-      <div className={clsx("grid grid-cols-1 gap-y-5 lg:grid-cols-3 lg:divide-x lg:divide-line", !v.on && "opacity-60 grayscale")}>
-        <Col className="lg:pr-6">
+      <div className={clsx("grid grid-cols-1 gap-y-5 @xl:grid-cols-2 @4xl:grid-cols-3", !v.on && "opacity-60 grayscale")}>
+        <Col className="border-line @xl:border-r @xl:pr-6">
           <div className="mb-3 flex items-center gap-2 text-[12px] text-muted">
             <Flag region={nodeRegion(asset, s)} />
             <span className="truncate">{[detail(asset, "地区") || (regionCode(nodeRegion(asset, s)) ?? ""), nodeOs(asset, s)].filter(Boolean).join(" · ") || "地区、系统未知"}</span>
@@ -53,18 +53,18 @@ export function NodeStatusCard({ asset, status: s }: { asset: Asset; status?: No
           </div>
           <Meters v={v} />
         </Col>
-        <Col className="lg:px-6">
+        <Col className="border-t border-line pt-5 @xl:border-t-0 @xl:pt-0 @xl:pl-6 @4xl:border-r @4xl:pr-6">
           <div className="grid grid-cols-2 gap-x-5"><SpeedCell dir="up" v={v} /><SpeedCell dir="down" v={v} /></div>
           <div className="mt-3 grid grid-cols-2 gap-x-5"><TotalCell dir="up" v={v} /><TotalCell dir="down" v={v} /></div>
           <div className="mt-4"><QuotaRow v={v} label="本月剩余" /></div>
-          <div className="mt-1.5 flex justify-between text-[11.5px] text-subtle"><span>{s ? typeLabel[s.trafficType] : ""}</span><span>{reset}</span></div>
+          <div className="mt-1.5 flex justify-between gap-3 text-[11.5px] whitespace-nowrap text-subtle"><span className="min-w-0 truncate">{s ? typeLabel[s.trafficType] : ""}</span><span className="shrink-0">{reset}</span></div>
         </Col>
-        <Col className="lg:pl-6">
+        <Col className="border-t border-line pt-5 @xl:col-span-2 @4xl:col-span-1 @4xl:border-t-0 @4xl:pt-0 @4xl:pl-6">
           {showPing ? <PingCells ping={s?.ping} /> : (
             <p className="text-[12px] text-subtle">{pingState === "empty" ? "Komari 里还没有延迟检测任务，加上后这里显示延迟和丢包。" : "暂时拿不到延迟数据。"}</p>
           )}
           {s?.ping && <div className="mt-1.5 truncate text-[11.5px] text-subtle">任务「{s.ping.task}」· 近 1 小时平均 {s.ping.avg ?? "—"} ms</div>}
-          <div className="mt-4 grid grid-cols-4 gap-2 border-t border-line pt-3 text-xs">
+          <div className="mt-4 grid grid-cols-4 gap-2 border-t border-line pt-3 text-xs whitespace-nowrap">
             <Mini label="在线" value={v.on && s ? `${Math.floor(s.uptimeSec / 86400)} 天` : "—"} />
             <Mini label="连接" value={v.on && s ? `${s.tcp + s.udp}` : "—"} />
             <Mini label="进程" value={v.on && s ? `${s.process}` : "—"} />

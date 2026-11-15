@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AssetDetail } from "./components/AssetDetail";
@@ -81,15 +82,16 @@ function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void
   const dot = assets.some((a) => daysUntil(a.expiresAt) <= 7);
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full max-md:pb-14">
       <Rail active={active} dark={dark} onNav={nav} onTheme={onTheme} dot={dot} user={me?.username} onLogout={demo ? undefined : onLogout} />
       {loading ? <main className="grid flex-1 place-items-center text-subtle">加载中…</main> : <>
         {route.section === "overview" && <Overview onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} onAdd={() => setForm({})} onNav={go} />}
         {route.section === "assets" && (
           <>
-            <AssetList selected={asset?.id} filter={route.type} onSelect={select} onFilter={(t) => go(`/assets${t === "all" ? "" : `?type=${t}`}`)} onAdd={() => setForm({ type: route.type === "all" ? undefined : route.type })} />
-            {asset ? <AssetDetail asset={asset} onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} onEdit={() => setForm({ id: asset.id })} />
-              : <main className="grid flex-1 place-items-center text-[13px] text-subtle">{route.type === "document" ? "还没有文档。合同、发票可以作为「文档」资产保存附件。" : "选择左侧的资产查看详情"}</main>}
+            <AssetList className={clsx(route.id && "max-lg:hidden")} selected={asset?.id} filter={route.type} onSelect={select} onFilter={(t) => go(`/assets${t === "all" ? "" : `?type=${t}`}`)} onAdd={() => setForm({ type: route.type === "all" ? undefined : route.type })} />
+            {asset ? <AssetDetail className={clsx(!route.id && "max-lg:hidden")} asset={asset} onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} onEdit={() => setForm({ id: asset.id })}
+                onBack={() => go(`/assets${route.type === "all" ? "" : `?type=${route.type}`}`)} />
+              : <main className="grid flex-1 place-items-center max-lg:hidden text-[13px] text-subtle">{route.type === "document" ? "还没有文档。合同、发票可以作为「文档」资产保存附件。" : "选择左侧的资产查看详情"}</main>}
           </>
         )}
         {route.section === "servers" && <Servers onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} />}

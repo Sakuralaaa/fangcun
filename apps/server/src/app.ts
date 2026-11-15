@@ -15,6 +15,7 @@ import {
 } from "./auth";
 import type { AtollService } from "./atoll";
 import type { BackupService } from "./backup";
+import type { CloudflareService } from "./cloudflare";
 import type { KomariService } from "./komari";
 import type { RatesService } from "./rates";
 import { HttpError, toPublic, type CommitResult, type Store } from "./store";
@@ -22,9 +23,9 @@ import { HttpError, toPublic, type CommitResult, type Store } from "./store";
 type Env = { Variables: { actor: Actor; session?: SessionRow } };
 const COOKIE = "fc_session";
 
-export interface AppDeps { store: Store; komari: KomariService; backup: BackupService; rates?: RatesService; atoll?: AtollService; webDir?: string; secureCookie?: boolean }
+export interface AppDeps { store: Store; komari: KomariService; backup: BackupService; rates?: RatesService; atoll?: AtollService; cloudflare?: CloudflareService; webDir?: string; secureCookie?: boolean }
 
-export function createApp({ store, komari, backup, rates, atoll, webDir, secureCookie }: AppDeps) {
+export function createApp({ store, komari, backup, rates, atoll, cloudflare, webDir, secureCookie }: AppDeps) {
   const app = new Hono<Env>();
   const loginLimit = new Limiter(10, 15 * 60_000);
   const db = store.db;
@@ -339,6 +340,7 @@ export function createApp({ store, komari, backup, rates, atoll, webDir, secureC
     next.atoll.intervalMin = [5, 15, 30, 60].includes(Number(next.atoll.intervalMin)) ? Number(next.atoll.intervalMin) : 15;
     next.atoll.enabled = Boolean(next.atoll.enabled);
     next.atoll.url = String(next.atoll.url ?? "").trim().slice(0, 300);
+    next.cloudflare = { enabled: Boolean(next.cloudflare?.enabled) };
     // the server owns the fetched-at stamp; a client can't fake it
     next.display.ratesUpdatedAt = cur.display.ratesUpdatedAt;
     next.display.ratesSource = cur.display.ratesSource;
@@ -347,6 +349,7 @@ export function createApp({ store, komari, backup, rates, atoll, webDir, secureC
     if (next.display.autoRates && (!cur.display.autoRates || cur.display.currency !== next.display.currency)) await rates?.refresh();
     if (cur.komari.url !== next.komari.url || cur.komari.intervalMin !== next.komari.intervalMin) { komari.resetCache(); komari.start(); }
     if (JSON.stringify(cur.atoll) !== JSON.stringify(next.atoll)) atoll?.start();
+    if (cur.cloudflare.enabled !== next.cloudflare.enabled) cloudflare?.start();
     return c.json({ settings: store.settings() });
   });
   app.post("/api/settings/rates/refresh", async (c) => {
@@ -431,6 +434,32 @@ export function createApp({ store, komari, backup, rates, atoll, webDir, secureC
     if (!store.settings().atoll.enabled) throw new HttpError(400, "Atoll 接入已关闭");
     const snap = await svc.sync();
     return c.json({ servers: snap.servers.length, projects: snap.projects.length, syncedAt: snap.syncedAt, key: svc.state.key ?? null });
+  });
+
+  // ---------- Cloudflare (read-only snapshot; links to assets are derived in the client, never stored) ----------
+  app.get("/api/cloudflare/info", (c) => {
+    need(c, "read");
+    const s = store.settings().cloudflare;
+    const snap = cloudflare?.snapshot() ?? null;
+    return c.json({
+      enabled: s.enabled, hasToken: cloudflare?.hasToken ?? false, hasAccountId: cloudflare?.hasAccountId ?? false,
+      lastSync: cloudflare?.lastSync() ?? null, lastError: cloudflare?.state.lastError ?? null,
+      token: cloudflare?.state.token ?? null, sections: snap?.sections ?? null,
+      counts: snap ? { accounts: snap.accounts.length, zones: snap.zones.length, records: snap.records.length, tunnels: snap.tunnels.length } : null,
+    });
+  });
+  app.get("/api/cloudflare/snapshot", (c) => {
+    need(c, "read");
+    if (!store.settings().cloudflare.enabled) return c.json({ snapshot: null });
+    return c.json({ snapshot: cloudflare?.snapshot() ?? null });
+  });
+  app.post("/api/cloudflare/sync", async (c) => {
+    need(c, "write");
+    if (actor(c).kind === "token" && decide(actor(c), "write") !== "direct") throw new HttpError(403, "同步需要完全权限令牌");
+    if (!cloudflare) throw new HttpError(503, "Cloudflare 接入未启用");
+    if (!store.settings().cloudflare.enabled) throw new HttpError(400, "Cloudflare 接入已关闭");
+    const snap = await cloudflare.sync({ manual: true });
+    return c.json({ zones: snap.zones.length, records: snap.records.length, syncedAt: snap.syncedAt, sections: snap.sections, token: cloudflare.state.token ?? null });
   });
 
   // ---------- tokens (web only) ----------
