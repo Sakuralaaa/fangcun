@@ -1,7 +1,7 @@
 services:
   fangcun:
-    build: .
-    # image: ghcr.io/sakuralaaa/fangcun:latest   # 发布镜像后可改用这一行
+    image: ghcr.io/sakuralaaa/fangcun:latest
+    # build: .                       # 想本地自己构建就改用这一行
     container_name: fangcun
     restart: unless-stopped
     ports:

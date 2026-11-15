@@ -31,18 +31,26 @@
 
 ### Docker（推荐）
 
+镜像：`ghcr.io/sakuralaaa/fangcun:latest`（amd64 / arm64，main 每次更新自动构建；打 `v*` 标签另有版本号标签）。
+
+在任意 Docker 面板里直接拉这个镜像即可，要点：
+
+- 端口：容器 `8080`
+- 数据卷：容器 `/data`（数据库、附件、自动备份都在这里，务必挂载）
+- 环境变量（可选）：`KOMARI_API_KEY`（Komari 管理员 API Key，只读使用）、`TZ=Asia/Shanghai`、`COOKIE_SECURE=1`（走 HTTPS 反代时）
+
+或用 compose：
+
 ```bash
-git clone https://github.com/Sakuralaaa/fangcun.git && cd fangcun
-# 可选：接入 Komari（管理员 API Key，只读使用）
-echo "KOMARI_API_KEY=你的 Komari API Key" > .env
+mkdir fangcun && cd fangcun
+curl -fsSLO https://raw.githubusercontent.com/Sakuralaaa/fangcun/main/docker-compose.yml
+echo "KOMARI_API_KEY=你的 Komari API Key" > .env   # 可选
 docker compose up -d
 ```
 
 打开 `http://服务器:8080`，**第一次访问时设置管理员账号和密码**（单用户，密码 scrypt 哈希存储），之后可在「设置 → 登录与两步验证」绑定 TOTP。
 
-数据都在 `/data`（compose 里映射到 `./data`）：`fangcun.db`（SQLite）、`attachments/`、`backups/`。
-
-多架构镜像：
+想自己构建：
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 -t fangcun:latest .
