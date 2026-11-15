@@ -133,6 +133,8 @@ export const demoAssets: Asset[] = [
   // Sparse records, like real libraries: one or two fields, no note, no renewals, no purchase date, expiry in another year.
   mk({ id: "lab-xyz", type: "domain", name: "lab-sample.xyz", provider: "Cloudflare", price: 10.44, cycle: "year", expiresAt: "2027-08-06",
     details: [{ label: "DNS 托管", value: "Cloudflare" }] }),
+  // Free domain: renewable only in the 180 days before expiry, so it is due when that window opens.
+  mk({ id: "free-dom", type: "domain", name: "sample.dpdns.org", provider: "DigitalPlat", price: 0, cycle: "year", expiresAt: "2027-05-10", renewWindowDays: 180 }),
   mk({ id: "spare-vps", type: "server", name: "spare-vps", provider: "小鸡云", price: 4, cycle: "month", expiresAt: "2027-01-28",
     details: [{ label: "IPv4", value: "203.0.113.9", mono: true }] }),
   mk({ id: "notes-app", type: "subscription", name: "笔记应用", price: 96, currency: "CNY", cycle: "year", expiresAt: "2027-01-10", autoRenew: true }),

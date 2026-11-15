@@ -15,7 +15,7 @@ const assetFields = {
   name: { type: "string" }, subtitle: { type: "string" }, provider: { type: "string" },
   price: { type: "number", description: "实付价，手填，不做汇率换算" }, currency: { type: "string", description: "USD / CNY / …" },
   cycle: { type: "string", enum: [...CYCLES] }, expiresAt: { type: "string", description: "YYYY-MM-DD" },
-  autoRenew: { type: "boolean" }, starred: { type: "boolean", description: "关注" }, pinned: { type: "boolean", description: "置顶（隐含关注）" }, purchasedAt: { type: "string" }, region: { type: "string" }, discount: { type: "string" },
+  autoRenew: { type: "boolean" }, renewWindowDays: { type: "integer", description: "手动续期窗口：到期前多少天起可以续期（如免费域名 180）；提醒按窗口打开日算" }, starred: { type: "boolean", description: "关注" }, pinned: { type: "boolean", description: "置顶（隐含关注）" }, purchasedAt: { type: "string" }, region: { type: "string" }, discount: { type: "string" },
   tags: { type: "array", items: { type: "string" } }, related: { type: "array", items: { type: "string" } },
   note: { type: "string" }, details: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" } } } },
   payment: { type: "object", description: "支付卡：issuer, network, last4（只存末四位，绝不传完整卡号/CVV）, cardExpiry(YYYY-MM), fees, billingRegion, status(active|frozen|closed)" },

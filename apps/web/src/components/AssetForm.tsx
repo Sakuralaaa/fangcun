@@ -96,7 +96,12 @@ export function AssetForm({ asset, initialType, onClose, onSaved }: { asset?: As
           </div>
           <Field label="区域" hint="如 土耳其区"><TextInput value={d.region} onChange={(v) => set("region", v)} /></Field>
           <Field label="折扣" hint="如 年付 8 折"><TextInput value={d.discount} onChange={(v) => set("discount", v)} /></Field>
-          <label className="col-span-2 flex items-center gap-2.5 text-[13px]"><Toggle on={Boolean(d.autoRenew)} onChange={(v) => set("autoRenew", v)} />自动续费</label>
+          <label className={clsx("flex h-9 items-center gap-2.5 self-end text-[13px]", d.autoRenew && "col-span-2")}><Toggle on={Boolean(d.autoRenew)} onChange={(v) => set("autoRenew", v)} />自动续费</label>
+          {!d.autoRenew && t !== "payment" && (
+            <Field label="到期前可续期" hint="天">
+              <TextInput value={d.renewWindowDays ? String(d.renewWindowDays) : ""} onChange={(v) => set("renewWindowDays", v.trim() ? Math.max(0, Math.floor(Number(v)) || 0) : null)} inputMode="numeric" placeholder="不限" />
+            </Field>
+          )}
         </Section>
       )}
 

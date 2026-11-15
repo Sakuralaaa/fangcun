@@ -56,6 +56,33 @@ export function nextExpiry(a: Pick<Asset, "expiresAt" | "cycle">, today: string)
   return next;
 }
 
+export function addDays(iso: string, days: number): string {
+  return new Date(Date.parse(iso.slice(0, 10)) + days * DAY).toISOString().slice(0, 10);
+}
+
+type RenewFields = { expiresAt?: string | null; autoRenew?: boolean; renewWindowDays?: number | null };
+
+/** 手动续期窗口打开的日子（到期日 − 窗口天数）。自动续费、没设窗口或没有到期日时为 null。 */
+export function renewOpensAt(a: RenewFields): string | null {
+  const n = a.renewWindowDays;
+  if (a.autoRenew || !n || n <= 0 || !a.expiresAt || !isIsoDate(a.expiresAt)) return null;
+  return addDays(a.expiresAt, -n);
+}
+
+/** 提醒按这一天算：设了手动续期窗口就是窗口打开的日子，否则是到期日。 */
+export function remindAt(a: RenewFields): string | null {
+  return renewOpensAt(a) ?? a.expiresAt ?? null;
+}
+
+/** 已进入手动续期窗口、但还没到期。 */
+export function renewOpen(a: RenewFields, today: string): boolean {
+  const o = renewOpensAt(a);
+  return Boolean(o && o <= today && daysUntil(a.expiresAt, today) >= 0);
+}
+
+/** 距离该提醒的天数（窗口打开日或到期日）。 */
+export const remindDays = (a: RenewFields, today: string) => daysUntil(remindAt(a), today);
+
 export type Urgency = "crit" | "warn" | "ok" | "none";
 
 /** 红 ≤7 天（含已过期），橙 ≤14 天，其余中性。 */
@@ -65,6 +92,18 @@ export function urgency(expiresAt: string | null | undefined, today: string): Ur
   if (d <= 7) return "crit";
   if (d <= 14) return "warn";
   return "ok";
+}
+
+/** 按提醒日判断紧急度：进入续期窗口即为红色，直到标记已续费。 */
+export function assetUrgency(a: RenewFields, today: string): Urgency {
+  return urgency(remindAt(a), today);
+}
+
+/** 资产的剩余时间文字：窗口已开为「可续期」，否则按提醒日。 */
+export function assetDueLabel(a: RenewFields, today: string): string {
+  if (daysUntil(a.expiresAt, today) < 0) return dueLabel(a.expiresAt, today);
+  if (renewOpen(a, today)) return "可续期";
+  return dueLabel(remindAt(a), today);
 }
 
 export function dueLabel(expiresAt: string | null | undefined, today: string): string {

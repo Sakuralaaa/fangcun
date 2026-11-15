@@ -2,7 +2,7 @@ import { compareStarred, displayTotal, isBilled, monthlyByCurrency, money, traff
 import clsx from "clsx";
 import { AlertTriangle, ArrowUpRight, Pin, Plus, Star } from "lucide-react";
 import type { Asset, AssetType } from "../data/types";
-import { dateLabel, daysUntil, dueLabel, getToday, monthlyDisplay, perCycle, urgency } from "../lib/fmt";
+import { dateLabel, dueLabel, remindDays, renewOpen, renewOpensAt, getToday, monthlyDisplay, perCycle, urgency } from "../lib/fmt";
 import { useData, useLiveStatus } from "../lib/store";
 import { hhmm, pctOf } from "./NodeStatus";
 import { Button, Card, FocusMark, KomariBadge, Pill, TypeIcon, typeMeta, urgencyText } from "./ui";
@@ -16,9 +16,9 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
   const disp = settings.display;
   const cur = disp.currency;
   const billed = assets.filter(isBilled);
-  const upcoming = assets.filter((a) => daysUntil(a.expiresAt) <= 45).sort((a, b) => daysUntil(a.expiresAt) - daysUntil(b.expiresAt));
-  const soon = assets.filter((a) => daysUntil(a.expiresAt) <= 30);
-  const thisWeek = assets.filter((a) => daysUntil(a.expiresAt) <= 7);
+  const upcoming = assets.filter((a) => remindDays(a) <= 45).sort((a, b) => remindDays(a) - remindDays(b));
+  const soon = assets.filter((a) => remindDays(a) <= 30);
+  const thisWeek = assets.filter((a) => remindDays(a) <= 7);
   const total = displayTotal(monthlyByCurrency(billed), disp);
   const monthly = total.total;
   const manual = soon.filter((a) => !a.autoRenew);
@@ -80,18 +80,19 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
           <Card title="即将到期" extra="未来 45 天" flush scroll className="min-h-0 max-h-[500px]">
             {upcoming.length ? upcoming.map((a) => {
               const u = urgency(a);
+              const at = renewOpensAt(a) && !renewOpen(a) && remindDays(a) >= 0 ? renewOpensAt(a)! : a.expiresAt!;
               return (
                 <button key={a.id} onClick={() => onSelect(a.id)} className="flex h-[60px] w-full shrink-0 items-center gap-4 border-b border-line px-4 text-left last:border-0 hover:bg-field/60">
                   <div className="w-11 shrink-0 rounded-sm bg-field py-1 text-center leading-tight whitespace-nowrap">
-                    <div className="text-[10.5px] text-subtle">{Number(a.expiresAt!.slice(5, 7))} 月</div>
-                    <div className="text-[17px] font-bold tnum">{a.expiresAt!.slice(8)}</div>
+                    <div className="text-[10.5px] text-subtle">{Number(at.slice(5, 7))} 月</div>
+                    <div className="text-[17px] font-bold tnum">{at.slice(8)}</div>
                   </div>
                   <TypeIcon type={a.type} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5"><span className="truncate font-semibold">{a.name}</span><FocusMark starred={a.starred} pinned={a.pinned} /></div>
                     <div className="truncate text-xs text-subtle">{typeMeta[a.type].label} · {a.payment ? `${a.payment.network ?? ""} ···· ${a.payment.last4} 卡片到期` : `${a.provider ?? ""} · ${perCycle(a)}`}</div>
                   </div>
-                  {a.autoRenew ? <span className="shrink-0 text-xs whitespace-nowrap text-subtle @max-md:hidden">自动续费</span> : <span className="shrink-0 rounded-[5px] border border-line px-1.5 py-px text-[11px] whitespace-nowrap text-muted @max-md:hidden">{a.type === "payment" ? "需换卡" : "手动续费"}</span>}
+                  {a.autoRenew ? <span className="shrink-0 text-xs whitespace-nowrap text-subtle @max-md:hidden">自动续费</span> : <span className="shrink-0 rounded-[5px] border border-line px-1.5 py-px text-[11px] whitespace-nowrap text-muted @max-md:hidden">{a.type === "payment" ? "需换卡" : renewOpensAt(a) ? "手动续期" : "手动续费"}</span>}
                   <div className="w-[76px] shrink-0 text-right"><Pill tone={u}>{dueLabel(a)}</Pill></div>
                 </button>
               );
@@ -161,8 +162,8 @@ export function Overview({ onSelect, onAdd, onNav }: { onSelect: (id: string) =>
 /** One 关注 row: name, what it is, the one status that matters (online for a probed VPS), cost, and when it is next due. */
 function StarredRow({ a, odd, online, onClick }: { a: Asset; odd: boolean; online?: boolean; onClick: () => void }) {
   const u = urgency(a);
-  const d = daysUntil(a.expiresAt);
-  const due = a.payment ? "卡片到期" : a.autoRenew ? "下次扣费" : "下次续费";
+  const d = remindDays(a);
+  const due = a.payment ? "卡片到期" : a.autoRenew ? "下次扣费" : renewOpensAt(a) ? "开放续期" : "下次续费";
   return (
     <button onClick={onClick} className={clsx("flex h-[60px] w-full min-w-0 items-center gap-3 border-b border-line px-4 text-left hover:bg-field/60", odd && "@4xl:border-l")}>
       <TypeIcon type={a.type} size="sm" />
@@ -178,7 +179,7 @@ function StarredRow({ a, odd, online, onClick }: { a: Asset; odd: boolean; onlin
         </div>
       </div>
       <div className="shrink-0 text-right leading-tight">
-        <div className={clsx("text-[12.5px] whitespace-nowrap tnum", u === "crit" || u === "warn" ? "font-semibold" : "", urgencyText[u])}>{d === Infinity ? "长期" : d < 0 ? dueLabel(a) : dateLabel(a.expiresAt!)}</div>
+        <div className={clsx("text-[12.5px] whitespace-nowrap tnum", u === "crit" || u === "warn" ? "font-semibold" : "", urgencyText[u])}>{d === Infinity ? "长期" : d < 0 ? dueLabel(a) : dateLabel(renewOpensAt(a) ?? a.expiresAt!)}</div>
         <div className="mt-0.5 text-[11px] whitespace-nowrap text-subtle">{d === Infinity ? "无到期日" : d < 0 ? due : `${due} · ${dueLabel(a)}`}</div>
       </div>
     </button>

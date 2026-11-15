@@ -113,6 +113,8 @@ export interface Asset {
   cycle: Cycle;
   expiresAt?: string | null;
   autoRenew: boolean;
+  /** 手动续期窗口：到期前多少天起可以续期（如免费域名的「到期前 180 天可续」）。只对未开自动续费的资产生效，提醒按窗口打开的日子算。 */
+  renewWindowDays?: number | null;
   purchasedAt?: string | null;
   /** Free-form price tags: 区域 (e.g. 土耳其区) and 折扣 (e.g. 年付 8 折). */
   region?: string;

@@ -86,3 +86,37 @@ describe("费用计算", () => {
     expect(paidSoFar({ price: 36, cycle: "year", purchasedAt: "2026-03-14" }, T)).toBe(36);
   });
 });
+
+import { assetDueLabel, assetUrgency, remindAt, remindDays, renewOpen, renewOpensAt, compareAssets, toIcs } from "../src";
+
+describe("手动续期窗口", () => {
+  const free = { expiresAt: "2027-05-01", autoRenew: false, renewWindowDays: 180 };
+  it("提醒按窗口打开日算", () => {
+    expect(renewOpensAt(free)).toBe("2026-11-02");
+    expect(remindAt(free)).toBe("2026-11-02");
+    expect(remindDays(free, "2026-10-26")).toBe(7);
+    expect(assetUrgency(free, "2026-10-26")).toBe("crit");
+    expect(assetDueLabel(free, "2026-10-20")).toBe("13 天");
+  });
+  it("窗口打开后为可续期、保持红色，到期后显示已过期", () => {
+    expect(renewOpen(free, "2026-11-15")).toBe(true);
+    expect(assetDueLabel(free, "2026-11-15")).toBe("可续期");
+    expect(assetUrgency(free, "2026-11-15")).toBe("crit");
+    expect(assetDueLabel(free, "2027-05-03")).toBe("已过期 2 天");
+  });
+  it("自动续费或没设窗口时照旧按到期日", () => {
+    expect(renewOpensAt({ ...free, autoRenew: true })).toBeNull();
+    expect(remindAt({ expiresAt: "2027-05-01", autoRenew: false })).toBe("2027-05-01");
+    expect(assetUrgency({ expiresAt: "2027-05-01" }, "2026-11-15")).toBe("ok");
+  });
+  it("排序把已可续期的排到前面", () => {
+    const a = { name: "a", pinned: false, expiresAt: "2026-12-01", autoRenew: true };
+    const b = { name: "b", pinned: false, ...free };
+    expect(compareAssets(a, b, "2026-11-15")).toBeGreaterThan(0);
+  });
+  it("日历多一条「可以续期了」", () => {
+    const ics = toIcs([{ id: "x", type: "domain", name: "free.dpdns.org", price: 0, currency: "USD", cycle: "year", tags: [], details: [], related: [], renewals: [], starred: false, pinned: false, createdAt: "", updatedAt: "", ...free } as never]);
+    expect(ics).toContain("DTSTART;VALUE=DATE:20261102");
+    expect(ics).toContain("可以续期了");
+  });
+});

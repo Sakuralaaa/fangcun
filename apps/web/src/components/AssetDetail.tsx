@@ -4,7 +4,7 @@ import { Check, ChevronLeft, Download, ExternalLink, FileUp, Globe, Lock, Pencil
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../data/types";
 import { api } from "../lib/api";
-import { cycleLabel, dateLabel, daysUntil, dueLabel, getToday, money, urgency, ymd } from "../lib/fmt";
+import { cycleLabel, dateLabel, daysUntil, dueLabel, remindDays, renewOpen, renewOpensAt, getToday, money, urgency, ymd } from "../lib/fmt";
 import { useData } from "../lib/store";
 import { AtollDomainCard, AtollImpact, AtollProjectsCard } from "./Atoll";
 import { CloudflareDomainCard, CloudflareServerCard } from "./Cloudflare";
@@ -44,6 +44,8 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
   const today = getToday();
   const u = urgency(a);
   const d = daysUntil(a.expiresAt);
+  const rd = remindDays(a);
+  const opensAt = renewOpensAt(a);
   const months = monthsHeld(a.purchasedAt, today);
   const ov = a.komari?.overridden ?? {};
   const account = a.type === "account" ? a : assets.find((x) => x.id === a.accountId && x.type === "account");
@@ -72,8 +74,8 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
               <p className="mt-0.5 truncate text-[13px] text-muted">{[a.subtitle, a.provider].filter(Boolean).join(" · ")}{a.tags.length > 0 && <span className="text-subtle"> · {a.tags.map((t) => `#${t}`).join("  ")}</span>}</p>
             </div>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-              {d <= 30 && <AtollImpact asset={a} />}
-              {d <= 30 && <Pill tone={u} dot>{d < 0 ? dueLabel(a) : `${dueLabel(a)}后到期`}</Pill>}
+              {rd <= 30 && <AtollImpact asset={a} />}
+              {rd <= 30 && <Pill tone={u} dot>{d < 0 || renewOpen(a) ? dueLabel(a) : opensAt ? `${dueLabel(a)}后可续期` : `${dueLabel(a)}后到期`}</Pill>}
               {a.payment && a.payment.status !== "active" && <Pill tone="none">{CARD_STATUS_LABEL[a.payment.status]}</Pill>}
               <Button icon={<Pencil size={14} />} onClick={onEdit}>编辑</Button>
               {!isAccount && a.cycle !== "once" && <Button variant="primary" icon={<Check size={15} />} onClick={() => setRenewing(true)}>标记已续费</Button>}
@@ -87,7 +89,7 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
             <div className="grid grid-cols-1 gap-3 @xl:grid-cols-3">
               <Stat label={a.type === "payment" ? "卡片有效期" : "下次续费"}
                 value={<span className={urgencyText[u]}>{a.expiresAt ? dateLabel(a.expiresAt) : "—"}</span>}
-                foot={a.expiresAt ? `${d < 0 ? `已过期 ${-d} 天` : `还有 ${d} 天`}${a.autoRenew ? " · 自动续费" : ""}` : "长期有效"}
+                foot={a.expiresAt ? `${d < 0 ? `已过期 ${-d} 天` : `还有 ${d} 天`}${a.autoRenew ? " · 自动续费" : ""}${opensAt && d >= 0 ? (renewOpen(a) ? " · 已可续期" : ` · ${dateLabel(opensAt)}起可续期`) : ""}` : "长期有效"}
                 synced={Boolean(a.komari?.fields && "expiresAt" in a.komari.fields)}
                 override={ov.expiresAt && { text: formatKomariValue("expiresAt", ov.expiresAt.komari), changed: ov.expiresAt.changed, onRestore: () => restoreField(a.id, "expiresAt") }} />
               <Stat label="费用" value={<>{money(a.price, a.currency)}{a.price > 0 && <span className="text-[15px] font-medium text-subtle">/{cycleLabel[a.cycle]}</span>}</>}
@@ -98,8 +100,8 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
                 ? <Stat label="已用" value={`${months} 个月`} foot={`${ymd(a.purchasedAt)} 购入${a.price ? ` · 累计约 ${money(paidSoFar(a, today), a.currency)}` : ""}`} />
                 : paidTotal(a)
                   ? <Stat label="累计续费" value={paidTotal(a)} foot={`${a.renewals.length} 次记录 · 最近 ${ymd(a.renewals[0].date)}`} />
-                  : <Stat label="续费方式" value={a.autoRenew ? "自动续费" : a.price ? "手动续费" : "免费"}
-                      foot={a.autoRenew ? "到期自动扣费，留意卡片余额" : a.price ? "到期前记得手动续费" : "无需付费"} />}
+                  : <Stat label="续费方式" value={a.autoRenew ? "自动续费" : a.price ? "手动续费" : a.renewWindowDays ? "手动续期" : "免费"}
+                      foot={a.autoRenew ? "到期自动扣费，留意卡片余额" : a.renewWindowDays ? `到期前 ${a.renewWindowDays} 天可续期` : a.price ? "到期前记得手动续费" : "无需付费"} />}
             </div>
           )}
 

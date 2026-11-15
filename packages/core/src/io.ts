@@ -1,11 +1,11 @@
 import { normalizeAsset, ValidationError } from "./asset";
-import { daysUntil } from "./dates";
+import { daysUntil, renewOpensAt } from "./dates";
 import { perCycle } from "./cost";
 import { ASSET_TYPES, TYPE_LABEL, type Asset, type AssetInput, type AssetType, type CardStatus, type Cycle } from "./types";
 
 /** CSV columns, shared by every type so one file can be imported back. */
 export const CSV_COLUMNS = [
-  "id", "type", "name", "subtitle", "provider", "price", "currency", "cycle", "expiresAt", "autoRenew", "purchasedAt",
+  "id", "type", "name", "subtitle", "provider", "price", "currency", "cycle", "expiresAt", "autoRenew", "renewWindowDays", "purchasedAt",
   "region", "discount", "tags", "related", "accountId", "details", "note", "starred", "pinned",
   "komariUuid", "trafficResetDay",
   "accountUsername", "accountSite",
@@ -22,7 +22,7 @@ const esc = (v: unknown) => {
 function row(a: Asset): Record<(typeof CSV_COLUMNS)[number], unknown> {
   return {
     id: a.id, type: a.type, name: a.name, subtitle: a.subtitle, provider: a.provider, price: a.price, currency: a.currency,
-    cycle: a.cycle, expiresAt: a.expiresAt, autoRenew: a.autoRenew ? "yes" : "no", purchasedAt: a.purchasedAt,
+    cycle: a.cycle, expiresAt: a.expiresAt, autoRenew: a.autoRenew ? "yes" : "no", renewWindowDays: a.renewWindowDays ?? "", purchasedAt: a.purchasedAt,
     region: a.region, discount: a.discount, tags: a.tags.join(";"), related: a.related.join(";"), accountId: a.accountId,
     details: a.details.map((d) => `${d.label}=${d.value}`).join(";"), note: a.note,
     starred: a.starred ? "yes" : "no", pinned: a.pinned ? "yes" : "no",
@@ -103,6 +103,7 @@ export function csvToInputs(text: string): AssetInput[] {
         price: Number(get(r, "price") || 0), currency: get(r, "currency") || "USD",
         cycle: (CYCLE_ALIASES[cycleRaw] ?? (cycleRaw || "month")) as Cycle,
         expiresAt: get(r, "expiresAt") || null, autoRenew: truthy(get(r, "autoRenew")), purchasedAt: get(r, "purchasedAt") || null,
+        ...(get(r, "renewWindowDays") ? { renewWindowDays: Number(get(r, "renewWindowDays")) } : {}),
         region: get(r, "region") || undefined, discount: get(r, "discount") || undefined,
         tags: list(get(r, "tags")), related: list(get(r, "related")), accountId: get(r, "accountId") || null,
         details: list(get(r, "details")).map((d) => { const [label, ...v] = d.split("="); return { label, value: v.join("=") }; }),
@@ -166,6 +167,17 @@ export function toIcs(assets: Asset[], stamp = new Date().toISOString()): string
       "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:-P1D", fold(`DESCRIPTION:${icsEsc(`${a.name} 明天到期`)}`), "END:VALARM",
       "END:VEVENT",
     );
+    const open = renewOpensAt(a);
+    if (open) {
+      const oe = new Date(Date.parse(open) + 86_400_000).toISOString().slice(0, 10);
+      lines.push(
+        "BEGIN:VEVENT", `UID:${a.id}-open-${icsDate(open)}@fangcun`, `DTSTAMP:${dt}`,
+        `DTSTART;VALUE=DATE:${icsDate(open)}`, `DTEND;VALUE=DATE:${icsDate(oe)}`,
+        fold(`SUMMARY:${icsEsc(`${a.name} 可以续期了`)}`), fold(`DESCRIPTION:${icsEsc(`${desc}\n到期日 ${a.expiresAt}`)}`),
+        "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:PT9H", fold(`DESCRIPTION:${icsEsc(`${a.name} 可以续期了`)}`), "END:VALARM",
+        "END:VEVENT",
+      );
+    }
   }
   lines.push("END:VCALENDAR");
   return lines.join("\r\n") + "\r\n";

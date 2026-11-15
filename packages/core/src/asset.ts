@@ -1,4 +1,4 @@
-import { daysUntil, endOfMonth, isIsoDate, nextExpiry } from "./dates";
+import { endOfMonth, isIsoDate, nextExpiry, remindDays } from "./dates";
 import {
   ASSET_TYPES, CARD_STATUS, CYCLES, type Asset, type AssetInput, type AssetType, type Cycle, type Renewal,
 } from "./types";
@@ -12,6 +12,13 @@ const str = (v: unknown, max = 500): string | undefined => {
   const s = String(v).trim();
   return s ? s.slice(0, max) : undefined;
 };
+const windowDays = (v: unknown): number | null => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 3650) throw new ValidationError("可续期天数应为 0–3650 的整数");
+  return n || null;
+};
+
 const date = (v: unknown, field: string): string | null => {
   if (v === undefined || v === null || v === "") return null;
   const s = String(v).slice(0, 10);
@@ -84,6 +91,7 @@ export function normalizeAsset(input: AssetInput & Partial<Asset>, now = new Dat
     currency, cycle,
     expiresAt: date(input.expiresAt, "到期日"),
     autoRenew: Boolean(input.autoRenew),
+    renewWindowDays: windowDays(input.renewWindowDays),
     purchasedAt: date(input.purchasedAt, "购入日期"),
     region: str(input.region, 60),
     discount: str(input.discount, 60),
@@ -295,16 +303,16 @@ export function focusPatch<T extends { starred?: boolean; pinned?: boolean }>(pa
 }
 
 /** 资产列表顺序：置顶在前，其次按到期日（无到期日在后），再按名称。 */
-export function compareAssets(a: Pick<Asset, "pinned" | "expiresAt" | "name">, b: Pick<Asset, "pinned" | "expiresAt" | "name">, today: string): number {
+export function compareAssets(a: Pick<Asset, "pinned" | "expiresAt" | "name" | "autoRenew" | "renewWindowDays">, b: Pick<Asset, "pinned" | "expiresAt" | "name" | "autoRenew" | "renewWindowDays">, today: string): number {
   return Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
-    || daysUntil(a.expiresAt, today) - daysUntil(b.expiresAt, today)
+    || remindDays(a, today) - remindDays(b, today)
     || a.name.localeCompare(b.name, "zh");
 }
 
 /** 总览「关注」区块顺序：30 天内到期的关注项最先（按到期日），其次置顶，再按到期日。 */
-export function compareStarred(a: Pick<Asset, "pinned" | "expiresAt" | "name">, b: Pick<Asset, "pinned" | "expiresAt" | "name">, today: string): number {
-  const rank = (x: Pick<Asset, "pinned" | "expiresAt">) => (daysUntil(x.expiresAt, today) <= 30 ? 0 : x.pinned ? 1 : 2);
-  return rank(a) - rank(b) || daysUntil(a.expiresAt, today) - daysUntil(b.expiresAt, today) || a.name.localeCompare(b.name, "zh");
+export function compareStarred(a: Pick<Asset, "pinned" | "expiresAt" | "name" | "autoRenew" | "renewWindowDays">, b: Pick<Asset, "pinned" | "expiresAt" | "name" | "autoRenew" | "renewWindowDays">, today: string): number {
+  const rank = (x: Pick<Asset, "pinned" | "expiresAt" | "autoRenew" | "renewWindowDays">) => (remindDays(x, today) <= 30 ? 0 : x.pinned ? 1 : 2);
+  return rank(a) - rank(b) || remindDays(a, today) - remindDays(b, today) || a.name.localeCompare(b.name, "zh");
 }
 
 export function searchAssets(list: Asset[], q: string): Asset[] {

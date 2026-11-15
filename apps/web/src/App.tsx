@@ -14,14 +14,14 @@ import { Button, Field, Modal, TextInput } from "./components/ui";
 import type { AssetType } from "./data/types";
 import { get, onStepUp, post } from "./lib/api";
 import { compareAssets } from "@fangcun/core";
-import { daysUntil, getToday } from "./lib/fmt";
+import { getToday, remindDays } from "./lib/fmt";
 import { DataProvider, isDemo, useData, type Me } from "./lib/store";
 
 /** Hash routes: #/overview · #/assets/<id>?type=server · #/servers · #/costs · #/settings/<tab> — plus ?theme=dark&demo=1. */
 function parse() {
   const [path, q = ""] = location.hash.replace(/^#\/?/, "").split("?");
-  const [section = "overview", id] = path.split("/");
-  return { section: section as Section, id: id ? decodeURIComponent(id) : undefined, type: (new URLSearchParams(q).get("type") ?? "all") as ListFilter };
+  const [section, id] = path.split("/");
+  return { section: (section || "overview") as Section, id: id ? decodeURIComponent(id) : undefined, type: (new URLSearchParams(q).get("type") ?? "all") as ListFilter };
 }
 
 export default function App() {
@@ -80,7 +80,7 @@ function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void
   const filtered = assets.filter((a) => matchFilter(a, route.type)).sort((a, b) => compareAssets(a, b, getToday()));
   const asset = assets.find((a) => a.id === route.id) ?? filtered[0];
   const active: Section = route.section === "assets" && route.type === "account" ? "accounts" : route.section === "assets" && route.type === "document" ? "docs" : route.section;
-  const dot = assets.some((a) => daysUntil(a.expiresAt) <= 7);
+  const dot = assets.some((a) => remindDays(a) <= 7);
 
   return (
     <div className="flex h-full max-md:pb-14">

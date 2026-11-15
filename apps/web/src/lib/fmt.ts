@@ -1,6 +1,6 @@
 import {
-  CYCLE_LABEL, daysUntil as coreDays, dueLabel as coreDue, money as coreMoney, monthlyCost, perCycle as corePer,
-  toDisplay, todayIso, urgency as coreUrgency, type DisplaySettings, type Urgency,
+  CYCLE_LABEL, assetDueLabel, assetUrgency, daysUntil as coreDays, remindDays as coreRemind, renewOpen as coreOpen, renewOpensAt, money as coreMoney, monthlyCost, perCycle as corePer,
+  toDisplay, todayIso, type DisplaySettings, type Urgency,
 } from "@fangcun/core";
 import type { Asset } from "../data/types";
 
@@ -10,8 +10,14 @@ export const setToday = (iso: string) => { today = iso; };
 export const getToday = () => today;
 
 export const daysUntil = (iso?: string | null) => coreDays(iso, today);
-export const urgency = (a: Pick<Asset, "expiresAt">): Urgency => coreUrgency(a.expiresAt, today);
-export const dueLabel = (a: Pick<Asset, "expiresAt">) => coreDue(a.expiresAt, today);
+type RenewFields = Pick<Asset, "expiresAt"> & Partial<Pick<Asset, "autoRenew" | "renewWindowDays">>;
+/** Urgency and labels follow the reminder date: the manual-renewal window's opening day when set, else the expiry. */
+export const urgency = (a: RenewFields): Urgency => assetUrgency(a, today);
+export const dueLabel = (a: RenewFields) => assetDueLabel(a, today);
+/** Days until the reminder date (window opening or expiry). */
+export const remindDays = (a: RenewFields) => coreRemind(a, today);
+export const renewOpen = (a: RenewFields) => coreOpen(a, today);
+export { renewOpensAt };
 export type { Urgency };
 
 export const md = (iso: string) => {

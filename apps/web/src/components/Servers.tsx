@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { ArrowDown, ArrowUp, CircleDollarSign, LayoutGrid, LayoutList, RefreshCw, Rows3 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Asset, NodeStatus } from "../data/types";
-import { daysUntil, urgency } from "../lib/fmt";
+import { remindDays, urgency } from "../lib/fmt";
 import { useData, useLiveStatus } from "../lib/store";
 import { useAtollOn } from "./Atoll";
 import { hhmm } from "./NodeStatus";
@@ -36,7 +36,7 @@ export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
 
   const servers = assets.filter((a) => a.type === "server")
     // 关注 first (置顶 before other starred), then online, then by expiry
-    .sort((a, b) => Number(b.starred) - Number(a.starred) || Number(b.pinned) - Number(a.pinned) || Number(!!st(b)?.online) - Number(!!st(a)?.online) || daysUntil(a.expiresAt) - daysUntil(b.expiresAt));
+    .sort((a, b) => Number(b.starred) - Number(a.starred) || Number(b.pinned) - Number(a.pinned) || Number(!!st(b)?.online) - Number(!!st(a)?.online) || remindDays(a) - remindDays(b));
 
   // Tabs: Komari groups when any node has one, otherwise 方寸 tags.
   const byGroup = servers.some((a) => st(a)?.group);
@@ -61,7 +61,7 @@ export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
   const monthly = displayTotal(monthlyByCurrency(servers), settings.display);
   const cur = settings.display.currency;
   const unconverted = Object.entries(monthly.unconverted);
-  const due = servers.filter((a) => a.expiresAt && daysUntil(a.expiresAt) <= 14).length;
+  const due = servers.filter((a) => a.expiresAt && remindDays(a) <= 14).length;
   const showPing = pingState === "ok" && servers.some((a) => st(a)?.ping);
   const [bwN, bwU] = speedParts(up + down);
   const [tN, tU] = bytesParts(totUp + totDown);
