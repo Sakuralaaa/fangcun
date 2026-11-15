@@ -114,10 +114,16 @@ export function bytesLabel(b?: number): string | undefined {
   return `${Math.round(b / 1024 ** 2)} MB`;
 }
 
+export function komariPrice(p?: number | null): number {
+  const n = Number(p ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 /** Map a Komari client to sync-key → value. Missing values are left out. */
 export function mapClient(c: KomariClient): Record<string, unknown> {
   const out: Record<string, unknown> = {
-    price: Number(c.price ?? 0),
+    // Komari marks free machines with price -1 (and leaves 0 for "not filled"); 方寸 records both as 0 = 免费
+    price: komariPrice(c.price),
     currency: komariCurrency(c.currency),
     cycle: komariCycle(c.billing_cycle),
     expiresAt: komariDate(c.expired_at),

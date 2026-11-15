@@ -1,6 +1,6 @@
 /** Data schema version. Bump together with a migration in backup.ts. */
 export const SCHEMA_VERSION = 2;
-export const APP_VERSION = "0.1.1";
+export const APP_VERSION = "0.1.2";
 
 export const ASSET_TYPES = [
   "server", "domain", "cert", "subscription", "mail", "phone", "payment", "account", "document",

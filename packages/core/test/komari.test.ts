@@ -58,3 +58,11 @@ describe("Komari 映射", () => {
     expect(trafficUsed({ ...s, trafficType: "sum" })).toBe(1e12);
   });
 });
+
+describe("Komari 免费机", () => {
+  it("price -1 (free) and missing price map to 0 instead of failing validation", () => {
+    expect(mapClient({ uuid: "f", name: "free", price: -1, billing_cycle: -1 } as KomariClient).price).toBe(0);
+    expect(mapClient({ uuid: "g", name: "unset" } as KomariClient).price).toBe(0);
+    expect(mapClient({ uuid: "h", name: "paid", price: 12.5 } as KomariClient).price).toBe(12.5);
+  });
+});
