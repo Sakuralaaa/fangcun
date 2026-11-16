@@ -5,6 +5,7 @@ import { APP_VERSION } from "@fangcun/core";
 import { createApp } from "./app";
 import { AtollService } from "./atoll";
 import { BackupService } from "./backup";
+import { CliproxyService } from "./cliproxyapi";
 import { CloudflareService } from "./cloudflare";
 import { openDb } from "./db";
 import { KomariService } from "./komari";
@@ -23,13 +24,15 @@ const komari = new KomariService(store);
 const atoll = new AtollService(store);
 const cloudflare = new CloudflareService(store);
 const rates = new RatesService(store);
+const cliproxy = new CliproxyService(store);
 const backup = new BackupService(store, dataDir, backupDir);
 const secure = process.env.COOKIE_SECURE === "1" ? true : process.env.COOKIE_SECURE === "0" ? false : undefined;
-const app = createApp({ store, komari, backup, rates, atoll, cloudflare, webDir, secureCookie: secure });
+const app = createApp({ store, komari, backup, rates, atoll, cloudflare, cliproxy, webDir, secureCookie: secure });
 
 komari.start();
 atoll.start();
 cloudflare.start();
+cliproxy.start();
 backup.start();
 rates.start();
 
@@ -40,6 +43,6 @@ serve({ fetch: app.fetch, port, hostname: host }, (info) => {
   if (!process.env.CLOUDFLARE_API_TOKEN) console.log("提示：未设置 CLOUDFLARE_API_TOKEN，Cloudflare 只读接入不可用");
 });
 
-const shutdown = () => { komari.stop(); atoll.stop(); cloudflare.stop(); backup.stop(); rates.stop(); store.db.close(); process.exit(0); };
+const shutdown = () => { komari.stop(); atoll.stop(); cloudflare.stop(); cliproxy.stop(); backup.stop(); rates.stop(); store.db.close(); process.exit(0); };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

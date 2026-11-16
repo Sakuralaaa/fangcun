@@ -15,6 +15,7 @@ import {
 } from "./auth";
 import type { AtollService } from "./atoll";
 import type { BackupService } from "./backup";
+import type { CliproxyService } from "./cliproxyapi";
 import type { CloudflareService } from "./cloudflare";
 import type { KomariService } from "./komari";
 import type { RatesService } from "./rates";
@@ -23,9 +24,9 @@ import { HttpError, toPublic, type CommitResult, type Store } from "./store";
 type Env = { Variables: { actor: Actor; session?: SessionRow } };
 const COOKIE = "fc_session";
 
-export interface AppDeps { store: Store; komari: KomariService; backup: BackupService; rates?: RatesService; atoll?: AtollService; cloudflare?: CloudflareService; webDir?: string; secureCookie?: boolean }
+export interface AppDeps { store: Store; komari: KomariService; backup: BackupService; rates?: RatesService; atoll?: AtollService; cloudflare?: CloudflareService; cliproxy?: CliproxyService; webDir?: string; secureCookie?: boolean }
 
-export function createApp({ store, komari, backup, rates, atoll, cloudflare, webDir, secureCookie }: AppDeps) {
+export function createApp({ store, komari, backup, rates, atoll, cloudflare, cliproxy, webDir, secureCookie }: AppDeps) {
   const app = new Hono<Env>();
   const loginLimit = new Limiter(10, 15 * 60_000);
   const db = store.db;
@@ -477,6 +478,43 @@ export function createApp({ store, komari, backup, rates, atoll, cloudflare, web
     if (!store.settings().cloudflare.enabled) throw new HttpError(400, "Cloudflare 接入已关闭");
     const snap = await cloudflare.sync({ manual: true });
     return c.json({ zones: snap.zones.length, records: snap.records.length, syncedAt: snap.syncedAt, sections: snap.sections, token: cloudflare.state.token ?? null });
+  });
+
+  // ---------- CLIProxyAPI (read-only quota; feed tokens never leave the server) ----------
+  const needCpx = () => { if (!cliproxy) throw new HttpError(503, "CLIProxyAPI 接入未启用"); return cliproxy; };
+  app.get("/api/cliproxyapi", (c) => {
+    need(c, "read");
+    const svc = needCpx();
+    return c.json({ connections: svc.list(), accounts: svc.accounts() });
+  });
+  app.post("/api/cliproxyapi/connections", async (c) => {
+    need(c, "admin");
+    const conn = await needCpx().add(await body(c));
+    store.audit(actor(c).name, "cliproxyapi-add", null, `添加 CLIProxyAPI 连接「${conn.name}」`, null, null);
+    return c.json({ connection: conn });
+  });
+  app.post("/api/cliproxyapi/test", async (c) => {
+    need(c, "admin");
+    const { connection } = await body<{ connection: string }>(c);
+    return c.json(await needCpx().test(connection));
+  });
+  app.patch("/api/cliproxyapi/connections/:id", async (c) => {
+    need(c, "admin");
+    return c.json({ connection: await needCpx().update(c.req.param("id"), await body(c)) });
+  });
+  app.delete("/api/cliproxyapi/connections/:id", (c) => {
+    need(c, "admin");
+    needCpx().remove(c.req.param("id"));
+    store.audit(actor(c).name, "cliproxyapi-remove", null, `删除 CLIProxyAPI 连接 ${c.req.param("id")}`, null, null);
+    return c.json({ ok: true });
+  });
+  app.post("/api/cliproxyapi/refresh", async (c) => {
+    need(c, "write");
+    if (actor(c).kind === "token" && decide(actor(c), "write") !== "direct") throw new HttpError(403, "刷新需要完全权限令牌");
+    const svc = needCpx();
+    const id = c.req.query("id");
+    if (id) await svc.refresh(id, true); else await svc.refreshAll(true);
+    return c.json({ connections: svc.list(), accounts: svc.accounts() });
   });
 
   // ---------- tokens (web only) ----------

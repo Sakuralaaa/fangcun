@@ -8,3 +8,4 @@ export * from "./cloudflare";
 export * from "./backup";
 export * from "./io";
 export * from "./perms";
+export * from "./cliproxyapi";

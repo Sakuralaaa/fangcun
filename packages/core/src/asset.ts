@@ -1,3 +1,4 @@
+import { normalizeQuotaBinds } from "./cliproxyapi";
 import { endOfMonth, isIsoDate, nextExpiry, remindDays } from "./dates";
 import {
   ASSET_TYPES, CARD_STATUS, CYCLES, type Asset, type AssetInput, type AssetType, type Cycle, type Renewal,
@@ -126,6 +127,7 @@ export function normalizeAsset(input: AssetInput & Partial<Asset>, now = new Dat
     atoll: type === "server" && input.atoll && typeof input.atoll === "object" && "serverId" in input.atoll
       ? { serverId: input.atoll.serverId === null ? null : str(input.atoll.serverId, 100) ?? null }
       : null,
+    quotaBinds: normalizeQuotaBinds(input.quotaBinds),
     team: null,
     account: null,
     payment: null,
@@ -154,8 +156,6 @@ export function normalizeAsset(input: AssetInput & Partial<Asset>, now = new Dat
         members: (w.members ?? []).filter((m) => str(m.email)).map((m) => ({
           email: str(m.email, 200)!, role: m.role === "owner" ? "owner" : "member",
           ...(m.note ? { note: String(m.note) } : {}),
-          ...(m.quota ? { quota: m.quota } : {}),
-          ...(m.authIndex ? { authIndex: String(m.authIndex) } : {}),
         })),
       })),
     };

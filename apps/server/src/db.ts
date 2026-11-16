@@ -35,6 +35,11 @@ const MIGRATIONS: string[] = [
   // v0.1.6: 关注 / 置顶. Existing assets default to not starred, not pinned.
   `UPDATE assets SET data = json_set(data, '$.starred', json('false')) WHERE json_type(data, '$.starred') IS NULL;
    UPDATE assets SET data = json_set(data, '$.pinned', json('false')) WHERE json_type(data, '$.pinned') IS NULL;`,
+  // v0.1.9: CLIProxyAPI connections. Own table so the feed tokens stay out of settings, backups and exports.
+  `CREATE TABLE cliproxyapi_connections (
+     id TEXT PRIMARY KEY, name TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', url TEXT NOT NULL, feed_path TEXT NOT NULL,
+     token TEXT NOT NULL, created_at TEXT NOT NULL, snapshot TEXT, fetched_at TEXT, last_error TEXT
+   );`,
 ];
 
 export type DB = DatabaseSync;

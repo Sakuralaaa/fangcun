@@ -56,9 +56,6 @@ export interface TeamMember {
   email: string;
   role: "owner" | "member";
   note?: string;
-  /** Demo-only quota preview (CPA plugin is on the roadmap). */
-  quota?: { label: string; usedPct: number; resetAt: string }[];
-  authIndex?: string;
 }
 /** A workspace under a parent account; price is what was actually paid (region / discount), never converted. */
 export interface Workspace {
@@ -131,6 +128,8 @@ export interface Asset {
   renewals: Renewal[];
   komari?: KomariLink | null;
   atoll?: AtollLink | null;
+  /** CLIProxyAPI accounts bound by hand (besides the automatic match by email). */
+  quotaBinds?: { provider: string; email: string; member?: string }[];
   team?: Team | null;
   account?: AccountInfo | null;
   payment?: PaymentInfo | null;
