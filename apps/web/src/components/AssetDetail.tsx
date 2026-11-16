@@ -1,10 +1,10 @@
-import { CARD_STATUS_LABEL, formatKomariValue, monthsHeld, nextExpiry, paidSoFar, yearlyCost } from "@fangcun/core";
+import { addCycle, CARD_STATUS_LABEL, formatKomariValue, monthsHeld, nextExpiry, paidSoFar, yearlyCost } from "@fangcun/core";
 import clsx from "clsx";
 import { Check, ChevronLeft, Download, ExternalLink, FileUp, Globe, Lock, Pencil, Pin, PinOff, Trash2, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../data/types";
 import { api } from "../lib/api";
-import { cycleLabel, dateLabel, daysUntil, dueLabel, remindDays, renewOpen, renewOpensAt, getToday, money, urgency, ymd } from "../lib/fmt";
+import { cycleLabel, dateLabel, daysUntil, dueLabel, perCycle, remindDays, renewOpen, renewOpensAt, getToday, money, urgency, ymd } from "../lib/fmt";
 import { useData } from "../lib/store";
 import { AtollDomainCard, AtollImpact, AtollProjectsCard } from "./Atoll";
 import { CloudflareDomainCard, CloudflareServerCard } from "./Cloudflare";
@@ -57,15 +57,17 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
   const rowH = Math.min(320, Math.max(220, 44 + Math.max(1, a.renewals.length) * 44 + 8, 44 + 112 + 16 + (links.length ? 16 + 44 + links.length * 48 : 0)));
   const isAccount = a.type === "account";
   const stat = a.komari ? status[a.komari.uuid] : undefined;
+  // servers keep the wide dashboard; every other type reads as one centred column
+  const narrow = a.type !== "server";
 
   return (
     <main className={clsx("flex min-w-0 flex-1 flex-col", className)}>
       <div className="@container flex-1 overflow-y-auto">
-        <div className="page flex flex-col gap-4">
+        <div className={clsx("page flex flex-col", narrow ? "@container max-w-[840px] gap-5" : "gap-4")}>
           {onBack && <button onClick={onBack} className="-mb-1 flex w-fit items-center gap-1 text-[13px] text-muted hover:text-ink lg:hidden"><ChevronLeft size={16} />资产</button>}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             <TypeIcon type={a.type} size="lg" />
-            <div className="min-w-0 flex-1 basis-[220px]">
+            <div className={clsx("min-w-0 flex-1", narrow && (rd <= 30 || a.name.length > 14) ? "basis-[calc(100%-72px)]" : "basis-[220px]")}>
               <div className="flex min-w-0 items-center gap-1.5">
                 <h1 className={clsx("truncate text-[22px] font-bold tracking-tight", a.type === "server" && "font-mono text-[23px]")}>{a.name}</h1>
                 <StarButton on={a.starred} name={a.name} onToggle={() => setFocus(a.id, { starred: !a.starred })} size={17} className="size-8" />
@@ -113,6 +115,28 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
           {a.team && <TeamCard team={a.team} />}
           {a.quota && <QuotaCard quota={a.quota} />}
 
+          {narrow ? <>
+            {!isAccount && <Timeline a={a} />}
+            {isAccount ? <AccountCard account={a} /> : rows.length > 0 && (
+              <Card title="详细信息" flush>
+                <div className="-mb-px grid @lg:grid-cols-2">
+                  {rows.map((f, i) => {
+                    const lastOdd = rows.length % 2 === 1 && i === rows.length - 1;
+                    return (
+                      <div key={f.label + i} className={clsx("flex h-11 min-w-0 items-center justify-between gap-3 border-b border-line px-4 text-[13px]",
+                        lastOdd ? "@lg:col-span-2" : i % 2 === 0 && "@lg:border-r")}>
+                        <span className="shrink-0 whitespace-nowrap text-muted">{f.label}</span>
+                        <span className={clsx("truncate", f.mono && !f.value.includes("@") && "font-mono text-[12.5px]")} title={f.value}>{f.value}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+            {account && !isAccount && <AccountCard account={account} compact onOpen={() => onSelect(account.id)} />}
+            {(links.length > 0 || isAccount) && <LinkCard title={isAccount ? "使用这个账号的资产" : a.type === "payment" ? "用这张卡付款" : "关联资产"} links={links} onSelect={onSelect} />}
+            <NoteCard a={a} />
+          </> : <>
           {/* paired rows: cards side by side always share one height; overflow scrolls inside */}
           <div className={clsx("grid gap-4", account && !isAccount && "@3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]", isAccount && "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
             {isAccount ? <AccountCard account={a} /> : (
@@ -158,6 +182,7 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
             </div>
           )}
           {isAccount && <NoteCard a={a} />}
+          </>}
 
           {(a.type === "document" || (a.attachments?.length ?? 0) > 0) && <Attachments a={a} />}
         </div>
@@ -328,6 +353,72 @@ function Attachments({ a }: { a: Asset }) {
           <button onClick={() => remove(f.name)} className="text-subtle hover:text-crit" title="删除"><Trash2 size={14} /></button>
         </div>
       )) : <Empty>还没有附件</Empty>}
+    </Card>
+  );
+}
+
+type Ev = { date: string; kind: "buy" | "renew" | "open" | "today" | "due" | "next"; title: string; meta?: string; amount?: string };
+const EV_ORDER: Record<Ev["kind"], number> = { buy: 0, renew: 1, open: 2, today: 3, due: 4, next: 5 };
+
+/** 时间线: purchase → recorded renewals → today → renewal window opening → next due, oldest first. */
+function Timeline({ a }: { a: Asset }) {
+  const [all, setAll] = useState(false);
+  useEffect(() => setAll(false), [a.id]);
+  const today = getToday();
+  const d = daysUntil(a.expiresAt);
+  const opensAt = renewOpensAt(a);
+  const card = a.type === "payment";
+  const renewals: Ev[] = a.renewals.map((r) => ({
+    date: r.date.slice(0, 10), kind: "renew", title: r.note || "续费",
+    meta: r.to ? `到期改为 ${ymd(r.to)}` : undefined, amount: money(r.amount, r.currency ?? a.currency),
+  }));
+  const LIMIT = 5;
+  const sortedRenewals = [...renewals].sort((x, y) => x.date.localeCompare(y.date));
+  const hidden = all ? 0 : Math.max(0, sortedRenewals.length - LIMIT);
+  const ev: Ev[] = [...sortedRenewals.slice(hidden)];
+  if (a.purchasedAt) ev.push({ date: a.purchasedAt.slice(0, 10), kind: "buy", title: card ? "开卡" : "购入", meta: !card && a.price > 0 ? perCycle(a) : undefined });
+  ev.push({ date: today, kind: "today", title: "今天", meta: !a.expiresAt ? "长期有效" : d < 0 ? `已过期 ${-d} 天` : d === 0 ? "今天到期" : `还有 ${d} 天${card ? "卡片到期" : "到期"}` });
+  if (opensAt && a.expiresAt && d >= 0) ev.push({ date: opensAt, kind: "open", title: opensAt <= today ? "已开放续期" : "开放续期", meta: `到期前 ${a.renewWindowDays} 天` });
+  if (a.expiresAt) ev.push({
+    date: a.expiresAt.slice(0, 10), kind: "due",
+    title: card ? "卡片到期" : a.cycle === "once" ? "到期" : a.autoRenew ? "自动扣费" : "到期",
+    meta: card ? "需换卡" : a.cycle === "once" || a.autoRenew ? undefined : a.price ? "需手动续费" : opensAt ? "需手动续期" : undefined,
+    amount: !card && a.price > 0 && a.cycle !== "once" ? money(a.price, a.currency) : undefined,
+  });
+  const after = !card && a.expiresAt && a.cycle !== "once" ? addCycle(a.expiresAt.slice(0, 10), a.cycle) : null;
+  if (after) ev.push({ date: after, kind: "next", title: "续费后到期" });
+  ev.sort((x, y) => x.date.localeCompare(y.date) || EV_ORDER[x.kind] - EV_ORDER[y.kind]);
+  const total = paidTotal(a);
+  const u = urgency(a);
+  return (
+    <Card title="时间线" extra={a.renewals.length ? `续费 ${a.renewals.length} 次${total && !total.endsWith("次") ? ` · 累计 ${total}` : ""}` : undefined}>
+      {hidden > 0 && (
+        <button onClick={() => setAll(true)} className="mb-1 ml-[130px] text-xs text-muted hover:text-ink">更早的 {hidden} 次续费</button>
+      )}
+      <ol className="flex flex-col">
+        {ev.map((e, i) => {
+          const past = e.date < today && e.kind !== "today";
+          const last = i === ev.length - 1;
+          return (
+            <li key={e.kind + e.date + i} className={clsx("flex gap-4 text-[13px]", !last && "min-h-12")}>
+              <span className={clsx("w-[86px] shrink-0 pt-px text-right whitespace-nowrap tnum", e.kind === "today" ? "font-semibold text-ink" : "text-muted")}>{ymd(e.date)}</span>
+              <span className="relative flex w-3 shrink-0 justify-center">
+                {!last && <span className={clsx("absolute top-3 -bottom-0.5 w-px", ev[i + 1].kind === "next" ? "border-l border-dashed border-line" : "bg-line")} />}
+                <span className={clsx("relative mt-[5px] size-2.5 rounded-full",
+                  e.kind === "today" ? "bg-ink ring-4 ring-accent-soft"
+                    : e.kind === "due" ? clsx("border-2 bg-panel", u === "crit" ? "border-crit" : u === "warn" ? "border-warn" : "border-muted")
+                    : e.kind === "next" ? "border-[1.5px] border-muted bg-panel opacity-70"
+                    : past ? "bg-muted" : "border-2 border-muted bg-panel")} />
+              </span>
+              <span className={clsx("min-w-0 flex-1", !last && "pb-3")}>
+                <span className={clsx("block truncate", e.kind === "today" || e.kind === "due" ? "font-semibold" : e.kind === "next" ? "text-muted" : "font-medium", e.kind === "due" && urgencyText[u])}>{e.title}</span>
+                {e.meta && <span className="block truncate text-xs text-muted">{e.meta}</span>}
+              </span>
+              {e.amount && <span className="shrink-0 pt-px font-medium whitespace-nowrap tnum">{e.amount}</span>}
+            </li>
+          );
+        })}
+      </ol>
     </Card>
   );
 }
