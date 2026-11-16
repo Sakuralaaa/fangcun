@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { CliproxyConnection } from "../data/types";
 import { api, post } from "../lib/api";
 import { useData } from "../lib/store";
-import { CliproxyBadge, QuotaRow, resetLabel } from "./Quota";
+import { QuotaRow, resetLabel } from "./Quota";
 import { Button, Card, Empty, Field, TextInput } from "./ui";
 
 type Form = { id?: string; name: string; note: string; connection: string };
@@ -50,7 +50,7 @@ export function CliproxySettings() {
 
   return (
     <>
-      <h1 className="flex items-center gap-2.5 text-[22px] font-bold tracking-tight">CLIProxyAPI <CliproxyBadge /></h1>
+      <h1 className="flex items-center gap-2.5 text-[22px] font-bold tracking-tight">CLIProxyAPI</h1>
       {demo && <p className="rounded-sm bg-field px-3 py-2 text-xs text-muted">演示模式：这里的操作不会连接服务端。</p>}
       <Card title="连接" extra={<div className="flex gap-2">
         <Button icon={<RefreshCw size={14} className={clsx(busy === "all" && "animate-spin")} />} onClick={() => refresh()} disabled={demo || !cpx.connections.length || Boolean(busy)}>全部刷新</Button>

@@ -4,7 +4,7 @@
 
 <p align="center">个人资产台账 —— 服务器、域名、证书、订阅、邮箱、号码、支付卡、账号、文档的<b>到期与费用</b>，一处管理。</p>
 
-<p align="center">自托管 · 单用户 · SQLite · 只读接入 Komari 探针 · CLI / MCP 给 AI 代理用 · MIT</p>
+<p align="center">自托管 · 单用户 · SQLite · 只读接入 Komari 探针 / CLIProxyAPI 额度 · CLI / MCP 给 AI 代理用 · MIT</p>
 
 ![总览](docs/screenshots/overview.png)
 
@@ -266,6 +266,33 @@ Atoll 是自托管的多 VPS 容器面板。方寸只读取它的服务器、项
 - Atoll 项目卡和域名详情里显示每个主机名在 Cloudflare 的记录、是否代理、是否走 Tunnel，并标出不一致（没有记录、记录指向的不是项目所在服务器、Tunnel 跑在别的机器上）。
 - Workers、Pages、R2 只显示，不建资产；它们的自定义域名会挂到对应的域名资产上。
 
+## CLIProxyAPI 接入（只读）
+
+在 CLIProxyAPI 里装上本仓库自带的「方寸」插件，方寸就能读到那台 CLIProxyAPI 号池里 **Codex** 和 **Google Antigravity** 账号的套餐、状态和各额度窗口（Codex：5 小时 / 每周或每月；Antigravity：按模型分组的 5 小时 / 每周等），挂到对应的订阅和团队成员上。号池分散在几台 CLIProxyAPI 上时，每台各加一个连接即可。
+
+**安装插件：**
+
+1. CLIProxyAPI 管理面板 →「配置」→ 第三方插件源（`plugins.store-sources`）里添加：
+   `https://raw.githubusercontent.com/Sakuralaaa/fangcun/main/registry.json`
+   （必须是这个 raw 地址：CLIProxyAPI 会把插件源地址原样当作 JSON 下载，填仓库主页 `https://github.com/Sakuralaaa/fangcun` 拿到的是网页，插件商店里看不到插件。）
+2. 插件商店里找到「方寸额度只读接口」，安装并启用。插件随方寸每次发版（`v*` 标签）一起构建，linux amd64 / arm64，适用于官方 Docker 镜像（glibc）。
+3. 管理面板左侧出现「方寸」页面：「地址」默认是你打开管理面板用的地址，方寸访问 CLIProxyAPI 走的地址不同就改一下；点「复制」拿到连接串。
+4. 方寸「设置 → CLIProxyAPI」→「添加」，填名称（如「家里 NAS」）、备注，粘贴连接串，可先点「测试」，再「保存」。
+
+**安全约束：**
+
+- 插件只注册两类东西：管理接口（`/v0/management/fangcun/connection`、`/fangcun/token/rotate`，受 CLIProxyAPI 管理密钥保护，只给面板取 / 换令牌）和资源路由（面板页面、只读额度接口 `/v0/resource/plugins/fangcun/feed`）。资源路由不经过 CLIProxyAPI 的管理密钥，额度接口用插件自己的**只读令牌**（`fcq_…`，32 字节随机数，存在 CLIProxyAPI 凭证目录的 `.fangcun-feed` 里）鉴权，只认请求头 `Authorization: Bearer` 或 `X-Fangcun-Token`，不认查询串里的令牌（免得进访问日志）。没有令牌或令牌不对一律 401。
+- 这个令牌只能读额度，不能调用模型、不能读管理接口。面板里「重新生成」后旧连接串立即失效。
+- 额度接口只返回：账号 id（CLIProxyAPI 的 auth_index）、类型、邮箱、标签、CLIProxyAPI 里的备注、套餐、状态、各窗口已用百分比和重置时间。**任何账号的 access / refresh token、账号 id、项目 id、文件路径都不会出现在响应里**（插件有单测保证）。插件读额度时在 CLIProxyAPI 进程内用凭证调用上游（Codex `wham/usage`；Antigravity `loadCodeAssist` 与 `retrieveUserQuotaSummary`），走 CLIProxyAPI 自己的代理设置；结果缓存 5 分钟，强制刷新至少间隔 60 秒。已停用的账号不会去读。
+- 方寸这边：连接串里的令牌只存在服务端数据库的单独一张表（`cliproxyapi_connections`）里，不进设置、不进完整备份和任何导出、不写日志、不发给浏览器；任何 API（网页登录或访问令牌）都只返回连接的名称、备注、地址、上次读取时间和错误。所以恢复备份后需要重新粘贴连接串。方寸对 CLIProxyAPI 只发 `GET <地址>/v0/resource/plugins/<插件 id>/feed` 这一个请求，不跟随重定向。添加、修改、删除连接只能在网页登录后操作；只读访问令牌可以读额度（CLI / AI 代理）。
+- 方寸每 10 分钟读一次所有连接，设置页可以单个或全部手动刷新。
+
+**怎么对上号（即时算出来的视图，不改资产）：**
+
+- 订阅：资产关联的登录账号（「账号」资产的用户名）、详细信息里任意一行邮箱、团队订阅的母号和成员邮箱，与号池账号邮箱相同（不区分大小写）即关联；几台 CLIProxyAPI 上的同一个邮箱都会列出，每行标明来自哪个连接（你起的名字）。
+- 团队成员：成员邮箱等于账号邮箱，工作空间卡片里显示该成员的 5 小时 / 每周剩余。
+- 手动关联：资产的 `quotaBinds`（`[{ provider, email, member? }]`，`member` 填成员邮箱即挂到那位成员上），用 CLI / API 编辑资产即可写入；网页编辑入口见路线图。
+
 ## 项目结构
 
 ```
@@ -273,6 +300,7 @@ packages/core   类型与 schema 版本、到期 / 紧急度 / 费用计算、Ko
 apps/server     Node 22 + Hono + node:sqlite；迁移、登录 / 会话 / TOTP、令牌、变更计划、审计与撤销、Komari 只读转发、Atoll 与 Cloudflare 只读快照、备份
 apps/web        React 19 + Vite + Tailwind v4 + lucide；?demo=1 为演示模式
 apps/cli        fangcun 命令与 stdio MCP server（esbuild 打成单文件）
+plugins/cliproxyapi  CLIProxyAPI 插件（Go，c-shared）：只读额度接口 + 连接串面板；registry.json 在仓库根目录
 ```
 
 测试（vitest）覆盖：到期与费用计算、支付卡 / 号码校验、Komari 映射与手改保护（伪造的 1.2.5 响应）、Atoll / Cloudflare 只读白名单与非只读令牌拒绝、Cloudflare 分页与单项降级、IP / 域名后缀匹配与手动绑定优先、备份往返与篡改检测、schema 迁移、令牌三档权限与审批流程、撤销与回收站、2FA 二次验证、MCP 协议。
@@ -287,7 +315,7 @@ apps/cli        fangcun 命令与 stdio MCP server（esbuild 打成单文件）
 - **v0.2 密码保险库（端到端加密）**：主密码在客户端用 Argon2id 派生密钥，服务器只存密文；网页查看需动态码 + 主密码，验证后 5 分钟免验证、明文 30 秒自动隐藏、查看记日志；离线恢复码；备份内只含密文。数据模型已为账号预留 `secret` 字段。
 - **桌面版（Electron）**：本地 SQLite，可离线使用，与网页服务端同步。
 - **手机 App**：查看到期、标记续费，受信设备免二次验证。
-- **AI 额度插件（CPA）**：只读拉取号池账号的 5 小时 / 每周剩余额度，挂到对应订阅和团队成员上（界面在演示模式里可预览）。
+- CLIProxyAPI：网页里手动关联 / 取消关联号池账号，CLI / MCP 的额度查询命令。
 - 备份推送到 WebDAV / S3 兼容存储、到期通知渠道。
 
 ## License
