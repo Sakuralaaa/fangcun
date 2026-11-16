@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "fangcun",
+      "name": "Fangcun quota feed",
+      "description": "Read-only quota feed for Fangcun (方寸): Codex and Antigravity accounts' plan, status and quota windows, behind a feed token of its own. Adds a panel with a connection string to paste into Fangcun.",
+      "author": "Sakuralaaa",
+      "version": "0.1.8",
+      "repository": "https://github.com/Sakuralaaa/fangcun",
+      "homepage": "https://github.com/Sakuralaaa/fangcun",
+      "license": "MIT",
+      "tags": ["Quota", "Fangcun"],
+      "locales": {
+        "zh-CN": {
+          "name": "方寸额度只读接口",
+          "description": "给方寸用的只读额度接口：读取 Codex 和 Antigravity 账号的套餐、状态和各额度窗口，用插件自己的只读令牌访问。管理面板里有「方寸」页面，复制连接串粘贴到方寸即可。"
+        }
+      }
+    }
+  ]
+}

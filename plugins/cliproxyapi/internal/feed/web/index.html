@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>方寸</title>
+<style>
+:root{--bg:#f6f6f5;--card:#fff;--text:#1d1e20;--sub:#5c5f66;--line:#d4d6da;--field:#f2f2f3;--pri:#1d1e20;--on-pri:#fff;--ok:#2f6b4f;--bad:#a3441c;--ring:0 0 0 3px rgba(29,30,32,.15)}
+@media (prefers-color-scheme:dark){:root{--bg:#121315;--card:#1b1c1f;--text:#e8e9eb;--sub:#a2a5ab;--line:#3a3c41;--field:#212225;--pri:#e8e9eb;--on-pri:#121315;--ok:#7cc4a0;--bad:#e59a6f;--ring:0 0 0 3px rgba(232,233,235,.2)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:640px;margin:0 auto;padding:28px 20px}
+h1{font-size:18px;margin:0 0 16px;font-weight:650}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+label{display:block;font-size:12.5px;color:var(--sub);margin:0 0 6px}
+.row{display:flex;gap:8px}
+input,textarea{width:100%;border:1px solid var(--line);background:var(--field);color:var(--text);border-radius:8px;padding:8px 10px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;outline:none}
+input:focus,textarea:focus{box-shadow:var(--ring)}
+textarea{resize:none;height:96px;word-break:break-all}
+.field+.field{margin-top:14px}
+button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:7px 14px;font:13px/1.4 inherit;font-family:inherit;cursor:pointer;white-space:nowrap}
+button.pri{background:var(--pri);color:var(--on-pri);border-color:var(--pri)}
+button:disabled{opacity:.55;cursor:default}
+.actions{display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.meta{font-size:12.5px;color:var(--sub);flex:1;min-width:160px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>方寸</h1>
+
+  <div id="keyBox" class="card hide">
+    <div class="field">
+      <label for="keyInput">管理密钥</label>
+      <div class="row"><input id="keyInput" type="password" autocomplete="off"><button class="pri" id="keyOk">确定</button></div>
+      <div id="keyErr" class="meta bad" style="margin-top:6px"></div>
+    </div>
+  </div>
+
+  <div id="connBox" class="card hide">
+    <div class="field">
+      <label for="base">地址</label>
+      <input id="base" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="conn">连接串</label>
+      <textarea id="conn" readonly spellcheck="false"></textarea>
+    </div>
+    <div class="actions">
+      <span id="meta" class="meta"></span>
+      <button id="rotate">重新生成</button>
+      <button id="copy" class="pri">复制</button>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+const MG = location.origin + '/v0/management';
+const OWN_KEY = 'fangcun-cliproxyapi-key';
+const PREFIX = 'fangcun-cliproxyapi:';
+let KEY = '', TOKEN = '', FEED = '';
+const $ = (id) => document.getElementById(id);
+
+// The management key: the management center's remembered login when it kept one
+// ("cli-proxy-auth", enc::v2:: = XOR with "cli-proxy-api-webui::secure-storage|<host>"),
+// else one typed here (kept for this tab only).
+const SALT = 'cli-proxy-api-webui::secure-storage';
+function xor(bytes, k) { const kb = new TextEncoder().encode(k); const o = new Uint8Array(bytes.length); for (let i = 0; i < bytes.length; i++) o[i] = bytes[i] ^ kb[i % kb.length]; return o; }
+function unb64(s) { const b = atob(s); const o = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) o[i] = b.charCodeAt(i); return o; }
+function centerKey() {
+  let raw = null; try { raw = localStorage.getItem('cli-proxy-auth'); } catch (e) {}
+  if (!raw) return '';
+  const hosts = [location.host]; try { if (window.parent && window.parent.location.host !== location.host) hosts.push(window.parent.location.host); } catch (e) {}
+  const tries = [];
+  if (raw.startsWith('enc::v2::')) hosts.forEach((h) => tries.push([raw.slice(9), SALT + '|' + h]));
+  else if (raw.startsWith('enc::v1::')) hosts.forEach((h) => tries.push([raw.slice(9), SALT + '|' + h + '|' + navigator.userAgent]));
+  else tries.push([null, null]);
+  for (const [body, k] of tries) {
+    try {
+      const txt = body === null ? raw : new TextDecoder().decode(xor(unb64(body), k));
+      const d = JSON.parse(txt); const st = d && d.state ? d.state : d;
+      if (st && st.managementKey) return st.managementKey;
+    } catch (e) {}
+  }
+  return '';
+}
+
+async function mg(method, path) {
+  const r = await fetch(MG + path, { method, headers: { Authorization: 'Bearer ' + KEY }, cache: 'no-store' });
+  const t = await r.text(); let d = null; try { d = t ? JSON.parse(t) : null; } catch (e) {}
+  if (r.status === 401 || r.status === 403) { const e = new Error('密钥不正确'); e.auth = true; throw e; }
+  if (!r.ok) throw new Error((d && d.error) || ('HTTP ' + r.status));
+  return d;
+}
+
+function b64url(s) { const b = new TextEncoder().encode(s); let bin = ''; b.forEach((x) => bin += String.fromCharCode(x)); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function render() {
+  const base = $('base').value.trim().replace(/\/+$/, '');
+  $('conn').value = TOKEN ? PREFIX + b64url(JSON.stringify({ v: 1, u: base, p: FEED, t: TOKEN })) : '';
+}
+
+async function counts() {
+  try {
+    const r = await fetch(location.origin + FEED, { headers: { Authorization: 'Bearer ' + TOKEN }, cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json(); const n = {};
+    (d.accounts || []).forEach((a) => { n[a.provider] = (n[a.provider] || 0) + 1; });
+    const parts = [['codex', 'Codex'], ['antigravity', 'Antigravity']].map(([k, l]) => l + ' ' + (n[k] || 0));
+    $('meta').textContent = parts.join(' · ');
+    $('meta').className = 'meta';
+  } catch (e) { $('meta').textContent = '读取失败：' + e.message; $('meta').className = 'meta bad'; }
+}
+
+async function load() {
+  try {
+    const d = await mg('GET', '/fangcun/connection');
+    TOKEN = d.token; FEED = d.feedPath;
+    $('keyBox').classList.add('hide'); $('connBox').classList.remove('hide');
+    render(); counts();
+  } catch (e) {
+    if (e.auth) { KEY = ''; try { sessionStorage.removeItem(OWN_KEY); } catch (x) {} askKey(e.message); return; }
+    $('connBox').classList.remove('hide'); $('meta').textContent = e.message; $('meta').className = 'meta bad';
+  }
+}
+
+function askKey(err) { $('keyErr').textContent = err || ''; $('connBox').classList.add('hide'); $('keyBox').classList.remove('hide'); $('keyInput').focus(); }
+
+$('keyOk').onclick = () => { const v = $('keyInput').value.trim(); if (!v) return; KEY = v; $('keyInput').value = ''; try { sessionStorage.setItem(OWN_KEY, v); } catch (e) {} load(); };
+$('keyInput').onkeydown = (e) => { if (e.key === 'Enter') $('keyOk').click(); };
+$('base').oninput = render;
+$('copy').onclick = async () => {
+  const v = $('conn').value; if (!v) return;
+  try { await navigator.clipboard.writeText(v); } catch (e) { $('conn').select(); document.execCommand('copy'); }
+  $('copy').textContent = '已复制'; setTimeout(() => { $('copy').textContent = '复制'; }, 1500);
+};
+$('rotate').onclick = async () => {
+  if (!confirm('重新生成后，之前复制的连接串全部失效。继续？')) return;
+  $('rotate').disabled = true;
+  try { const d = await mg('POST', '/fangcun/token/rotate'); TOKEN = d.token; FEED = d.feedPath; render(); counts(); }
+  catch (e) { $('meta').textContent = e.message; $('meta').className = 'meta bad'; }
+  $('rotate').disabled = false;
+};
+
+$('base').value = location.origin;
+KEY = centerKey(); if (!KEY) { try { KEY = sessionStorage.getItem(OWN_KEY) || ''; } catch (e) {} }
+if (KEY) load(); else askKey('');
+</script>
+</body>
+</html>
