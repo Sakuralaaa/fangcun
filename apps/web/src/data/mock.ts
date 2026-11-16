@@ -1,3 +1,5 @@
+import type { QuotaAccount } from "@fangcun/core";
+import type { CliproxyConnection } from "./types";
 import { DEFAULT_SETTINGS, type AtollSnapshot, type CfSnapshot, type NodeStatus, type Settings } from "@fangcun/core";
 import type { Asset, StatusMap } from "./types";
 
@@ -81,16 +83,7 @@ export const demoAssets: Asset[] = [
   mk({ id: "ai-code", starred: true, type: "subscription", name: "研发编程助手", subtitle: "AI 订阅 · Pro", provider: "AI 平台",
     price: 100, cycle: "month", expiresAt: "2026-11-30", autoRenew: true, purchasedAt: "2025-08-30",
     tags: ["工作"], accountId: "acc-ai", related: ["card-wise"],
-    details: [{ label: "套餐", value: "Pro" }],
-    quota: {
-      observedAt: "2026-11-15 11:24",
-      accounts: [
-        { authIndex: "a1b2c3d4", provider: "codex", email: "sak@starbridge.example", plan: "Pro", status: "ready",
-          windows: [{ label: "5 小时", usedPct: 62, resetAt: "2026-11-15 13:40" }, { label: "每周", usedPct: 38, resetAt: "2026-11-19 08:00" }] },
-        { authIndex: "e5f6a7b8", provider: "claude", email: "dev@starbridge.example", plan: "Max 5x", status: "cooling",
-          windows: [{ label: "5 小时", usedPct: 100, resetAt: "2026-11-15 12:10" }, { label: "每周", usedPct: 81, resetAt: "2026-11-17 02:00" }] },
-      ],
-    } }),
+    details: [{ label: "套餐", value: "Pro" }, { label: "登录邮箱", value: "sak@starbridge.example" }] }),
   mk({ id: "gpt-team", starred: true, type: "subscription", name: "ChatGPT Team", subtitle: "团队订阅 · 2 个工作空间", provider: "OpenAI",
     price: 1380, currency: "CNY", cycle: "month", expiresAt: "2026-11-26", autoRenew: true, purchasedAt: "2026-03-26",
     tags: ["工作", "号池"], accountId: "acc-ai", related: ["card-onekey"], details: [{ label: "母号", value: "owner@starbridge.example" }],
@@ -100,15 +93,15 @@ export const demoAssets: Asset[] = [
         { id: "ws-dev", name: "研发空间", seats: 5, price: 820, currency: "CNY", cycle: "month", expiresAt: "2026-11-26", region: "土耳其区", discount: "年付 8 折",
           members: [
             { email: "owner@starbridge.example", role: "owner" },
-            { email: "dev1@starbridge.example", role: "member", authIndex: "t1", quota: [{ label: "5 小时", usedPct: 45, resetAt: "2026-11-15 14:30" }, { label: "每周", usedPct: 22, resetAt: "2026-11-20 08:00" }] },
-            { email: "dev2@starbridge.example", role: "member", authIndex: "t2", quota: [{ label: "5 小时", usedPct: 92, resetAt: "2026-11-15 12:50" }, { label: "每周", usedPct: 74, resetAt: "2026-11-18 08:00" }] },
+            { email: "dev1@starbridge.example", role: "member" },
+            { email: "dev2@starbridge.example", role: "member" },
             { email: "dev3@starbridge.example", role: "member" },
           ] },
         { id: "ws-ops", name: "内容空间", seats: 3, price: 560, currency: "CNY", cycle: "month", expiresAt: "2026-12-09", region: "美区",
           members: [
             { email: "owner@starbridge.example", role: "owner" },
-            { email: "pool-a@starbridge.example", role: "member", authIndex: "t3", quota: [{ label: "5 小时", usedPct: 10, resetAt: "2026-11-15 16:00" }, { label: "每周", usedPct: 35, resetAt: "2026-11-21 08:00" }] },
-            { email: "pool-b@starbridge.example", role: "member", authIndex: "t4", quota: [{ label: "5 小时", usedPct: 0, resetAt: "2026-11-15 17:00" }, { label: "每周", usedPct: 8, resetAt: "2026-11-22 08:00" }] },
+            { email: "pool-a@starbridge.example", role: "member" },
+            { email: "pool-b@starbridge.example", role: "member" },
           ] },
       ],
     } }),
@@ -296,4 +289,22 @@ export const demoCfInfo = {
     permissions: ["Account Settings Read", "Zone Read", "DNS Read", "Registrar Domains Read", "Cloudflare Tunnel Read", "Workers Scripts Read", "Pages Read", "Workers R2 Storage Read", "API Tokens Read"] },
   sections: demoCfSnapshot.sections,
   counts: { accounts: 1, zones: 4, records: 12, tunnels: 3 },
+};
+
+// ---- CLIProxyAPI (demo) ----
+const w = (key: string, usedPct: number, resetAt: string, group?: string) => ({ key: group ? `${group}/${key}` : key, window: key, usedPct, resetAt, ...(group ? { group } : {}) });
+export const demoCliproxy: { connections: CliproxyConnection[]; accounts: QuotaAccount[] } = {
+  connections: [
+    { id: "cpx-home", name: "家里 NAS", note: "个人号池", url: "https://cpa.home.example", createdAt: "2026-10-02T08:00:00Z", fetchedAt: "2026-11-15T03:24:00Z", lastError: null, accounts: 3 },
+    { id: "cpx-hk", name: "香港机", note: "团队成员的 Codex", url: "https://cpa-hk.example", createdAt: "2026-10-20T08:00:00Z", fetchedAt: "2026-11-15T03:20:00Z", lastError: null, accounts: 4 },
+  ],
+  accounts: [
+    { id: "a1b2", provider: "codex", email: "sak@starbridge.example", plan: "pro", status: "ok", windows: [w("5h", 62, "2026-11-15T05:40:00Z"), w("week", 38, "2026-11-19T00:00:00Z")], connectionId: "cpx-home", connectionName: "家里 NAS" },
+    { id: "c3d4", provider: "antigravity", email: "sak@starbridge.example", plan: "pro", status: "ok", windows: [w("5h", 40, "2026-11-15T07:00:00Z", "Gemini Pro"), w("week", 12, "2026-11-20T00:00:00Z", "Gemini Pro"), w("5h", 100, "2026-11-15T04:10:00Z", "Claude")], connectionId: "cpx-home", connectionName: "家里 NAS" },
+    { id: "e5f6", provider: "codex", email: "side@sak.example", plan: "plus", status: "expired", message: "credential rejected (401)", windows: [], connectionId: "cpx-home", connectionName: "家里 NAS" },
+    { id: "t1", provider: "codex", email: "dev1@starbridge.example", plan: "team", status: "ok", windows: [w("5h", 45, "2026-11-15T06:30:00Z"), w("week", 22, "2026-11-20T00:00:00Z")], connectionId: "cpx-hk", connectionName: "香港机" },
+    { id: "t2", provider: "codex", email: "dev2@starbridge.example", plan: "team", status: "limited", windows: [w("5h", 100, "2026-11-15T04:50:00Z"), w("week", 74, "2026-11-18T00:00:00Z")], connectionId: "cpx-hk", connectionName: "香港机" },
+    { id: "t3", provider: "codex", email: "pool-a@starbridge.example", plan: "team", status: "ok", windows: [w("5h", 10, "2026-11-15T08:00:00Z"), w("week", 35, "2026-11-21T00:00:00Z")], connectionId: "cpx-hk", connectionName: "香港机" },
+    { id: "t4", provider: "codex", email: "pool-b@starbridge.example", plan: "team", status: "ok", windows: [w("5h", 0, "2026-11-15T09:00:00Z"), w("week", 8, "2026-11-22T00:00:00Z")], connectionId: "cpx-hk", connectionName: "香港机" },
+  ],
 };

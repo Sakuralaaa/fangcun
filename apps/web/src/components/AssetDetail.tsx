@@ -112,8 +112,8 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
           {a.type === "server" && <CloudflareServerCard asset={a} onSelect={onSelect} />}
           {a.type === "domain" && <CloudflareDomainCard asset={a} onSelect={onSelect} />}
           {a.type === "domain" && <AtollDomainCard asset={a} onSelect={onSelect} />}
-          {a.team && <TeamCard team={a.team} />}
-          {a.quota && <QuotaCard quota={a.quota} />}
+          {a.team && <TeamCard asset={a} />}
+          <QuotaCard asset={a} />
 
           {narrow ? <>
             {!isAccount && <Timeline a={a} />}

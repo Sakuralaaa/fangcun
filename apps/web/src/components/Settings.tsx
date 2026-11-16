@@ -6,11 +6,12 @@ import type { Asset } from "../data/types";
 import { api, download, get, post } from "../lib/api";
 import { useData } from "../lib/store";
 import { AtollBadge } from "./Atoll";
+import { CliproxySettings } from "./Cliproxy";
 import { CloudflareSettings } from "./Cloudflare";
 import { Button, Card, Empty, Field, KomariBadge, ScrollRow, Select, TextInput, Toggle, TypeIcon } from "./ui";
 
 export const SETTINGS_TABS: [string, string][] = [
-  ["general", "常规"], ["security", "登录与两步验证"], ["komari", "Komari 探针"], ["atoll", "Atoll 面板"], ["cloudflare", "Cloudflare"], ["tokens", "访问令牌"],
+  ["general", "常规"], ["security", "登录与两步验证"], ["komari", "Komari 探针"], ["atoll", "Atoll 面板"], ["cloudflare", "Cloudflare"], ["cliproxyapi", "CLIProxyAPI"], ["tokens", "访问令牌"],
   ["plans", "变更审批"], ["log", "操作日志"], ["trash", "回收站"], ["backup", "备份与导出"], ["about", "关于"],
 ];
 
@@ -40,6 +41,7 @@ export function Settings({ tab = "general", onTab }: { tab?: string; onTab: (t: 
           {current === "komari" && <Komari />}
           {current === "atoll" && <AtollSettings />}
           {current === "cloudflare" && <CloudflareSettings onSelect={(id) => { location.hash = `#/assets/${id}`; }} />}
+          {current === "cliproxyapi" && <CliproxySettings />}
           {current === "tokens" && <Tokens />}
           {current === "plans" && <Plans />}
           {current === "log" && <Log />}

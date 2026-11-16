@@ -1,7 +1,7 @@
 import { buildAtollView, buildCloudflareView, DEFAULT_SETTINGS, focusPatch, normalizeAsset, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type CfSection, type CfSectionState, type CfSnapshot, type CfView, type PingState, type Settings } from "@fangcun/core";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { demoAssets, demoAtollInfo, demoAtollSnapshot, demoCfInfo, demoCfSnapshot, demoKomariInfo, demoSettings, demoStatus, DEMO_TODAY } from "../data/mock";
-import type { Asset, StatusMap } from "../data/types";
+import { demoAssets, demoAtollInfo, demoAtollSnapshot, demoCfInfo, demoCfSnapshot, demoCliproxy, demoKomariInfo, demoSettings, demoStatus, DEMO_TODAY } from "../data/mock";
+import type { Asset, CliproxyConnection, QuotaAccount, StatusMap } from "../data/types";
 import { api, get, post } from "./api";
 import { getToday, setToday } from "./fmt";
 
@@ -43,6 +43,10 @@ interface Ctx {
   /** Links between assets and Cloudflare (zones, records, tunnels), derived on the fly; never stored on assets. */
   cfView: CfView;
   reloadCloudflare: () => Promise<void>;
+  /** CLIProxyAPI connections (no tokens) and every account they read. */
+  cpx: { connections: CliproxyConnection[]; accounts: QuotaAccount[] };
+  reloadCliproxy: () => Promise<void>;
+  setCpx: (v: { connections: CliproxyConnection[]; accounts: QuotaAccount[] }) => void;
   loading: boolean;
   backupError: string | null;
   reload: () => Promise<void>;
@@ -80,6 +84,7 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   const [atollSnap, setAtollSnap] = useState<AtollSnapshot | null>(demo ? demoAtollSnapshot : null);
   const [cf, setCf] = useState<CfInfo | null>(demo ? demoCfInfo : null);
   const [cfSnap, setCfSnap] = useState<CfSnapshot | null>(demo ? demoCfSnapshot : null);
+  const [cpx, setCpx] = useState<{ connections: CliproxyConnection[]; accounts: QuotaAccount[] }>(demo ? demoCliproxy : { connections: [], accounts: [] });
   const [loading, setLoading] = useState(!demo);
   const [backupError, setBackupError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string; tone: "ok" | "err" }[]>([]);
@@ -110,9 +115,16 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
     setCfSnap(s?.snapshot ?? null);
   }, [demo]);
 
+  const reloadCliproxy = useCallback(async () => {
+    if (demo) return;
+    const r = await get<{ connections: CliproxyConnection[]; accounts: QuotaAccount[] }>("/api/cliproxyapi").catch(() => null);
+    if (r) setCpx(r);
+  }, [demo]);
+
   const reload = useCallback(async () => {
     if (demo) return;
     reloadAtoll().catch(() => {});
+    reloadCliproxy().catch(() => {});
     reloadCloudflare().catch(() => {});
     const [a, s, k, b] = await Promise.all([
       get<{ assets: Asset[]; today: string }>("/api/assets"),
@@ -126,7 +138,7 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
     setKomari(k);
     setBackupError(b?.lastError ?? null);
     setLoading(false);
-  }, [demo, reloadAtoll, reloadCloudflare]);
+  }, [demo, reloadAtoll, reloadCloudflare, reloadCliproxy]);
 
   const refreshStatus = useCallback(async () => {
     if (demo) return;
@@ -213,9 +225,9 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   const cfView = useMemo(() => buildCloudflareView(assets, settings.cloudflare.enabled ? cfSnap : null, atollView), [assets, cfSnap, settings.cloudflare.enabled, atollView]);
 
   const value = useMemo<Ctx>(() => ({
-    demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, loading, backupError, reload, refreshStatus,
+    demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, cpx, reloadCliproxy, setCpx, loading, backupError, reload, refreshStatus,
     create, update, renew, setFocus, remove, restoreField, saveSettings, toast, setMe,
-  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, loading, backupError, reload, refreshStatus, create, update, renew, setFocus, remove, restoreField, saveSettings, toast]);
+  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, cpx, reloadCliproxy, loading, backupError, reload, refreshStatus, create, update, renew, setFocus, remove, restoreField, saveSettings, toast]);
 
   return (
     <C.Provider value={value}>
