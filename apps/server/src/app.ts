@@ -485,7 +485,25 @@ export function createApp({ store, komari, backup, rates, atoll, cloudflare, cli
   app.get("/api/cliproxyapi", (c) => {
     need(c, "read");
     const svc = needCpx();
-    return c.json({ connections: svc.list(), accounts: svc.accounts() });
+    return c.json({ connections: svc.list(), accounts: svc.accounts(), prefs: svc.prefs() });
+  });
+  /** 关注 / 手动绑定 one account. Stored in 方寸 only; CLIProxyAPI is never written to. */
+  app.put("/api/cliproxyapi/accounts/:conn/:account", async (c) => {
+    need(c, "write");
+    if (actor(c).kind === "token" && decide(actor(c), "write") !== "direct") throw new HttpError(403, "需要网页登录或完全权限令牌");
+    const svc = needCpx();
+    const before = svc.prefs();
+    const { pref, account } = svc.setPref(c.req.param("conn"), c.req.param("account"), await body(c));
+    const old = before.find((p) => p.connectionId === pref.connectionId && p.accountId === pref.accountId);
+    const who = account.email ?? account.label ?? account.id;
+    const parts: string[] = [];
+    if ((old?.starred ?? false) !== pref.starred) parts.push(pref.starred ? "关注" : "取消关注");
+    if ((old?.assetId ?? null) !== (pref.assetId ?? null) || (old?.member ?? null) !== (pref.member ?? null)) {
+      const a = pref.assetId ? store.get(pref.assetId) : null;
+      parts.push(a ? `绑定到「${a.name}」${pref.member ? `成员 ${pref.member}` : ""}` : "解除绑定");
+    }
+    if (parts.length) store.audit(actor(c).name, "cliproxyapi-account", null, `CLIProxyAPI 账号 ${who}：${parts.join("，")}`, null, null);
+    return c.json({ prefs: svc.prefs() });
   });
   app.post("/api/cliproxyapi/connections", async (c) => {
     need(c, "admin");
@@ -514,7 +532,7 @@ export function createApp({ store, komari, backup, rates, atoll, cloudflare, cli
     const svc = needCpx();
     const id = c.req.query("id");
     if (id) await svc.refresh(id, true); else await svc.refreshAll(true);
-    return c.json({ connections: svc.list(), accounts: svc.accounts() });
+    return c.json({ connections: svc.list(), accounts: svc.accounts(), prefs: svc.prefs() });
   });
 
   // ---------- tokens (web only) ----------

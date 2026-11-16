@@ -40,6 +40,12 @@ const MIGRATIONS: string[] = [
      id TEXT PRIMARY KEY, name TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', url TEXT NOT NULL, feed_path TEXT NOT NULL,
      token TEXT NOT NULL, created_at TEXT NOT NULL, snapshot TEXT, fetched_at TEXT, last_error TEXT
    );`,
+  // v0.1.10: 方寸's own settings per CLIProxyAPI account — 关注 and a manual bind to an asset. Default: not starred, unbound.
+  `CREATE TABLE cliproxyapi_accounts (
+     connection_id TEXT NOT NULL, account_id TEXT NOT NULL, provider TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
+     starred INTEGER NOT NULL DEFAULT 0, asset_id TEXT, member TEXT, updated_at TEXT NOT NULL,
+     PRIMARY KEY (connection_id, account_id)
+   );`,
 ];
 
 export type DB = DatabaseSync;

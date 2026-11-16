@@ -1,4 +1,4 @@
-import { buildAtollView, buildCloudflareView, DEFAULT_SETTINGS, focusPatch, normalizeAsset, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type CfSection, type CfSectionState, type CfSnapshot, type CfView, type PingState, type Settings } from "@fangcun/core";
+import { buildAtollView, buildCloudflareView, DEFAULT_SETTINGS, focusPatch, normalizeAsset, prefFor, type CpaPref, renewAsset, restoreKomariField, markOverrides, type AtollSnapshot, type AtollView, type CfSection, type CfSectionState, type CfSnapshot, type CfView, type PingState, type Settings } from "@fangcun/core";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { demoAssets, demoAtollInfo, demoAtollSnapshot, demoCfInfo, demoCfSnapshot, demoCliproxy, demoKomariInfo, demoSettings, demoStatus, DEMO_TODAY } from "../data/mock";
 import type { Asset, CliproxyConnection, QuotaAccount, StatusMap } from "../data/types";
@@ -20,6 +20,8 @@ export interface CfInfo {
 export interface Me { username: string; totpEnabled: boolean }
 
 export const isDemo = () => new URLSearchParams(location.search).get("demo") === "1" || import.meta.env.VITE_DEMO === "1";
+
+export type Cpx = { connections: CliproxyConnection[]; accounts: QuotaAccount[]; prefs: CpaPref[] };
 
 type WriteResult = { status: "applied" | "pending" | "unchanged"; assets?: Asset[]; message?: string };
 
@@ -44,9 +46,11 @@ interface Ctx {
   cfView: CfView;
   reloadCloudflare: () => Promise<void>;
   /** CLIProxyAPI connections (no tokens) and every account they read. */
-  cpx: { connections: CliproxyConnection[]; accounts: QuotaAccount[] };
+  cpx: Cpx;
   reloadCliproxy: () => Promise<void>;
-  setCpx: (v: { connections: CliproxyConnection[]; accounts: QuotaAccount[] }) => void;
+  setCpx: (v: Cpx) => void;
+  /** 关注 / 绑定 one CLIProxyAPI account (stored in 方寸 only). assetId null unbinds. */
+  setCpaPref: (acc: QuotaAccount, patch: { starred?: boolean; assetId?: string | null; member?: string | null }) => Promise<void>;
   loading: boolean;
   backupError: string | null;
   reload: () => Promise<void>;
@@ -84,7 +88,8 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   const [atollSnap, setAtollSnap] = useState<AtollSnapshot | null>(demo ? demoAtollSnapshot : null);
   const [cf, setCf] = useState<CfInfo | null>(demo ? demoCfInfo : null);
   const [cfSnap, setCfSnap] = useState<CfSnapshot | null>(demo ? demoCfSnapshot : null);
-  const [cpx, setCpx] = useState<{ connections: CliproxyConnection[]; accounts: QuotaAccount[] }>(demo ? demoCliproxy : { connections: [], accounts: [] });
+  const [cpx, setCpxRaw] = useState<Cpx>(demo ? demoCliproxy : { connections: [], accounts: [], prefs: [] });
+  const setCpx = useCallback((v: Cpx) => setCpxRaw({ ...v, prefs: v.prefs ?? [] }), []);
   const [loading, setLoading] = useState(!demo);
   const [backupError, setBackupError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string; tone: "ok" | "err" }[]>([]);
@@ -117,9 +122,28 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
 
   const reloadCliproxy = useCallback(async () => {
     if (demo) return;
-    const r = await get<{ connections: CliproxyConnection[]; accounts: QuotaAccount[] }>("/api/cliproxyapi").catch(() => null);
+    const r = await get<Cpx>("/api/cliproxyapi").catch(() => null);
     if (r) setCpx(r);
-  }, [demo]);
+  }, [demo, setCpx]);
+
+  const setCpaPref = useCallback(async (acc: QuotaAccount, patch: { starred?: boolean; assetId?: string | null; member?: string | null }) => {
+    const cur = prefFor(acc, cpx.prefs);
+    const next: CpaPref = { connectionId: acc.connectionId, accountId: acc.id, provider: acc.provider, ...(acc.email ? { email: acc.email } : {}),
+      starred: patch.starred ?? cur?.starred ?? false,
+      assetId: patch.assetId !== undefined ? patch.assetId : cur?.assetId ?? null,
+      member: patch.assetId !== undefined ? (patch.assetId ? patch.member ?? null : null) : cur?.member ?? null };
+    const others = cpx.prefs.filter((p) => p !== cur);
+    const optimistic = next.starred || next.assetId ? [...others, next] : others;
+    setCpxRaw((c) => ({ ...c, prefs: optimistic }));
+    if (demo) return;
+    try {
+      const r = await api<{ prefs: CpaPref[] }>("PUT", `/api/cliproxyapi/accounts/${encodeURIComponent(acc.connectionId)}/${encodeURIComponent(acc.id)}`, patch);
+      setCpxRaw((c) => ({ ...c, prefs: r.prefs }));
+    } catch (e) {
+      toast((e as Error).message, "err");
+      setCpxRaw((c) => ({ ...c, prefs: cpx.prefs }));
+    }
+  }, [demo, cpx.prefs, toast]);
 
   const reload = useCallback(async () => {
     if (demo) return;
@@ -225,9 +249,9 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   const cfView = useMemo(() => buildCloudflareView(assets, settings.cloudflare.enabled ? cfSnap : null, atollView), [assets, cfSnap, settings.cloudflare.enabled, atollView]);
 
   const value = useMemo<Ctx>(() => ({
-    demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, cpx, reloadCliproxy, setCpx, loading, backupError, reload, refreshStatus,
+    demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, cpx, reloadCliproxy, setCpx, setCpaPref, loading, backupError, reload, refreshStatus,
     create, update, renew, setFocus, remove, restoreField, saveSettings, toast, setMe,
-  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, cpx, reloadCliproxy, loading, backupError, reload, refreshStatus, create, update, renew, setFocus, remove, restoreField, saveSettings, toast]);
+  }), [demo, me, assets, settings, status, statusAt, pingState, komari, atoll, atollSnap, atollView, reloadAtoll, cf, cfSnap, cfView, reloadCloudflare, cpx, reloadCliproxy, setCpx, setCpaPref, loading, backupError, reload, refreshStatus, create, update, renew, setFocus, remove, restoreField, saveSettings, toast]);
 
   return (
     <C.Provider value={value}>

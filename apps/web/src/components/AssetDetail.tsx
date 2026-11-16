@@ -113,7 +113,7 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
           {a.type === "domain" && <CloudflareDomainCard asset={a} onSelect={onSelect} />}
           {a.type === "domain" && <AtollDomainCard asset={a} onSelect={onSelect} />}
           {a.team && <TeamCard asset={a} />}
-          <QuotaCard asset={a} />
+          <QuotaCard asset={a} onOpen={onSelect} />
 
           {narrow ? <>
             {!isAccount && <Timeline a={a} />}

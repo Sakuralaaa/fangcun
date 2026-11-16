@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { CliproxyConnection } from "../data/types";
 import { api, post } from "../lib/api";
 import { useData } from "../lib/store";
-import { QuotaRow, resetLabel } from "./Quota";
+import { resetLabel } from "./Quota";
 import { Button, Card, Empty, Field, TextInput } from "./ui";
 
 type Form = { id?: string; name: string; note: string; connection: string };
@@ -87,11 +87,6 @@ export function CliproxySettings() {
           </div>
         )}
       </Card>
-      {cpx.accounts.length > 0 && (
-        <Card title="账号" extra={`${cpx.accounts.length} 个`} flush>
-          {cpx.accounts.map((a) => <QuotaRow key={a.connectionId + a.id} a={a} />)}
-        </Card>
-      )}
     </>
   );
 }

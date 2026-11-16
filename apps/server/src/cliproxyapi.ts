@@ -1,4 +1,4 @@
-import { newId, parseConnectionString, pickQuotaAccount, type QuotaAccount } from "@fangcun/core";
+import { newId, normalizeCpaPrefs, normEmail, parseConnectionString, pickQuotaAccount, prefFor, QUOTA_ASSET_TYPES, type CpaPref, type QuotaAccount } from "@fangcun/core";
 import { HttpError, type Store } from "./store";
 
 /**
@@ -88,6 +88,41 @@ export class CliproxyService {
   remove(id: string) {
     this.row(id);
     this.store.db.prepare("DELETE FROM cliproxyapi_connections WHERE id = ?").run(id);
+    this.store.db.prepare("DELETE FROM cliproxyapi_accounts WHERE connection_id = ?").run(id);
+  }
+
+  // ---------- 关注 / 手动绑定 (stored in 方寸 only; nothing is written to CLIProxyAPI) ----------
+
+  prefs(): CpaPref[] { return readCpaPrefs(this.store); }
+  private writePref(p: CpaPref) { writeCpaPref(this.store, p); }
+
+  /** Star / bind one account the feed currently lists. assetId null clears the bind. */
+  setPref(connectionId: string, accountId: string, patch: { starred?: unknown; assetId?: unknown; member?: unknown }): { pref: CpaPref; account: QuotaAccount } {
+    this.row(connectionId);
+    const acc = this.accounts().find((a) => a.connectionId === connectionId && a.id === accountId);
+    if (!acc) throw new HttpError(404, "这个连接里没有该账号（先刷新一次）");
+    const cur = prefFor(acc, this.prefs());
+    const next: CpaPref = { connectionId, accountId, provider: acc.provider, ...(acc.email ? { email: acc.email } : {}), starred: cur?.starred ?? false, assetId: cur?.assetId ?? null, member: cur?.member ?? null };
+    if (patch.starred !== undefined) {
+      if (typeof patch.starred !== "boolean") throw new HttpError(400, "starred 需要是 true / false");
+      next.starred = patch.starred;
+    }
+    if (patch.assetId !== undefined) {
+      if (patch.assetId === null || patch.assetId === "") { next.assetId = null; next.member = null; }
+      else {
+        const a = this.store.get(String(patch.assetId));
+        if (!a || a.deletedAt) throw new HttpError(404, "资产不存在");
+        if (!(QUOTA_ASSET_TYPES as readonly string[]).includes(a.type)) throw new HttpError(400, "只能绑定到订阅、账号或邮箱资产");
+        next.assetId = a.id;
+        const m = patch.member ? normEmail(patch.member) : "";
+        if (m && !(a.team?.workspaces ?? []).some((w) => w.members.some((x) => normEmail(x.email) === m))) throw new HttpError(400, "该资产的团队里没有这个成员");
+        next.member = m || null;
+      }
+    }
+    // an older row found by provider + email (the feed id changed): move it to the current id
+    if (cur && cur.accountId !== accountId) this.store.db.prepare("DELETE FROM cliproxyapi_accounts WHERE connection_id = ? AND account_id = ?").run(cur.connectionId, cur.accountId);
+    this.writePref(next);
+    return { pref: next, account: acc };
   }
 
   /** The single exit point: GET the feed of one connection. */
@@ -149,4 +184,41 @@ export class CliproxyService {
     this.timer.unref();
   }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
+}
+
+// ---------- 关注 / 手动绑定 rows (also read and written by backups) ----------
+
+export function readCpaPrefs(store: Store): CpaPref[] {
+  const names = new Map((store.db.prepare("SELECT id, name FROM cliproxyapi_connections").all() as { id: string; name: string }[]).map((r) => [r.id, r.name]));
+  const rows = store.db.prepare("SELECT * FROM cliproxyapi_accounts ORDER BY connection_id, account_id").all() as unknown as
+    { connection_id: string; account_id: string; provider: string; email: string; starred: number; asset_id: string | null; member: string | null }[];
+  return rows.map((r) => ({
+    connectionId: r.connection_id, accountId: r.account_id, provider: r.provider, ...(r.email ? { email: r.email } : {}),
+    starred: Boolean(r.starred), assetId: r.asset_id, member: r.member, ...(names.has(r.connection_id) ? { connectionName: names.get(r.connection_id) } : {}),
+  }));
+}
+
+export function writeCpaPref(store: Store, p: CpaPref) {
+  if (!p.starred && !p.assetId) {
+    store.db.prepare("DELETE FROM cliproxyapi_accounts WHERE connection_id = ? AND account_id = ?").run(p.connectionId, p.accountId);
+    return;
+  }
+  store.db.prepare(`INSERT INTO cliproxyapi_accounts (connection_id, account_id, provider, email, starred, asset_id, member, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(connection_id, account_id) DO UPDATE SET provider = excluded.provider, email = excluded.email, starred = excluded.starred,
+    asset_id = excluded.asset_id, member = excluded.member, updated_at = excluded.updated_at`)
+    .run(p.connectionId, p.accountId, p.provider, p.email ?? "", p.starred ? 1 : 0, p.assetId ?? null, p.member ?? null, new Date().toISOString());
+}
+
+/** Restore prefs from a backup. Connections are matched by id, else by name; rows for unknown connections are kept as-is. */
+export function importCpaPrefs(store: Store, raw: unknown, mode: "merge" | "replace"): number {
+  const list = normalizeCpaPrefs(raw);
+  const conns = store.db.prepare("SELECT id, name FROM cliproxyapi_connections").all() as { id: string; name: string }[];
+  const ids = new Set(conns.map((r) => r.id));
+  const byName = new Map(conns.map((r) => [r.name, r.id]));
+  if (mode === "replace") store.db.exec("DELETE FROM cliproxyapi_accounts");
+  for (const p of list) {
+    const connectionId = ids.has(p.connectionId) ? p.connectionId : (p.connectionName && byName.get(p.connectionName)) || p.connectionId;
+    writeCpaPref(store, { ...p, connectionId });
+  }
+  return list.length;
 }

@@ -244,8 +244,8 @@ describe("关注 / 置顶", () => {
     db.prepare("INSERT INTO assets (id, type, name, data, updated_at) VALUES (?, ?, ?, ?, ?)").run("old", "domain", "old.dev",
       JSON.stringify({ id: "old", type: "domain", name: "old.dev", price: 1, currency: "USD", cycle: "year", tags: [], details: [], related: [], renewals: [], autoRenew: false, updatedAt: "t" }), "t");
     db.prepare("DELETE FROM _migrations WHERE version >= 2").run(); // pretend this library was created by v0.1.5
-    db.exec("DROP TABLE cliproxyapi_connections");
-    expect(migrate(db)).toBe(3);
+    db.exec("DROP TABLE cliproxyapi_connections; DROP TABLE cliproxyapi_accounts");
+    expect(migrate(db)).toBe(4);
     expect(new Store(db).get("old")).toMatchObject({ starred: false, pinned: false, name: "old.dev" });
   });
 

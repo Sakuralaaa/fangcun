@@ -1,4 +1,4 @@
-import type { QuotaAccount } from "@fangcun/core";
+import type { CpaPref, QuotaAccount } from "@fangcun/core";
 import type { CliproxyConnection } from "./types";
 import { DEFAULT_SETTINGS, type AtollSnapshot, type CfSnapshot, type NodeStatus, type Settings } from "@fangcun/core";
 import type { Asset, StatusMap } from "./types";
@@ -22,6 +22,7 @@ export const demoAssets: Asset[] = [
     note: "子账号，只有香港和新加坡区权限；主账号在财务那边。" }),
   mk({ id: "acc-reg", type: "account", name: "域名注册商", subtitle: "域名管理", provider: "域名注册商", cycle: "once", account: { username: "sak@starbridge.example", site: "dash.registrar.example" } }),
   mk({ id: "acc-ai", type: "account", name: "AI 平台", subtitle: "订阅付款账号", provider: "AI 平台", cycle: "once", account: { username: "sak@starbridge.example", site: "platform.ai.example" } }),
+  mk({ id: "acc-dev1", type: "account", name: "dev1@starbridge.example", subtitle: "Team 子号 · 研发空间", provider: "OpenAI", cycle: "once", tags: ["号池"], related: ["gpt-team"], account: { username: "" } }),
   mk({ id: "acc-mail", type: "account", name: "企业邮箱后台", subtitle: "管理员", provider: "企业邮箱", cycle: "once", account: { username: "admin@starbridge.example", site: "mail.starbridge.example" } }),
 
   mk({ id: "hk-api-02", starred: true, type: "server", name: "hk-api-02", subtitle: "香港 API 副节点", provider: "演示云",
@@ -293,18 +294,45 @@ export const demoCfInfo = {
 
 // ---- CLIProxyAPI (demo) ----
 const w = (key: string, usedPct: number, resetAt: string, group?: string) => ({ key: group ? `${group}/${key}` : key, window: key, usedPct, resetAt, ...(group ? { group } : {}) });
-export const demoCliproxy: { connections: CliproxyConnection[]; accounts: QuotaAccount[] } = {
+const at = (d: string, hm: string) => `2026-11-${d}T${hm}:00+08:00`;
+const home = { connectionId: "cpx-home", connectionName: "家里 NAS" };
+const hk = { connectionId: "cpx-hk", connectionName: "香港机" };
+const lab = { connectionId: "cpx-lab", connectionName: "公司测试机" };
+const codex = (id: string, email: string, plan: string, h5: number, wk: number, c: typeof home, status = "ok") =>
+  ({ id, provider: "codex", email, plan, status, windows: [w("5h", h5, at("15", "14:30")), w("week", wk, at("20", "08:00"))], ...c });
+export const demoCliproxy: { connections: CliproxyConnection[]; accounts: QuotaAccount[]; prefs: CpaPref[] } = {
   connections: [
-    { id: "cpx-home", name: "家里 NAS", note: "个人号池", url: "https://cpa.home.example", createdAt: "2026-10-02T08:00:00Z", fetchedAt: "2026-11-15T03:24:00Z", lastError: null, accounts: 3 },
-    { id: "cpx-hk", name: "香港机", note: "团队成员的 Codex", url: "https://cpa-hk.example", createdAt: "2026-10-20T08:00:00Z", fetchedAt: "2026-11-15T03:20:00Z", lastError: null, accounts: 4 },
+    { id: "cpx-home", name: "家里 NAS", note: "个人号池", url: "https://cpa.home.example", createdAt: "2026-10-02T08:00:00Z", fetchedAt: at("15", "11:24"), lastError: null, accounts: 6 },
+    { id: "cpx-hk", name: "香港机", note: "团队成员的 Codex", url: "https://cpa-hk.example", createdAt: "2026-10-20T08:00:00Z", fetchedAt: at("15", "11:20"), lastError: null, accounts: 9 },
+    { id: "cpx-lab", name: "公司测试机", note: "", url: "https://cpa-lab.example", createdAt: "2026-11-01T08:00:00Z", fetchedAt: at("15", "11:18"), lastError: null, accounts: 3 },
   ],
   accounts: [
-    { id: "a1b2", provider: "codex", email: "sak@starbridge.example", plan: "pro", status: "ok", windows: [w("5h", 62, "2026-11-15T05:40:00Z"), w("week", 38, "2026-11-19T00:00:00Z")], connectionId: "cpx-home", connectionName: "家里 NAS" },
-    { id: "c3d4", provider: "antigravity", email: "sak@starbridge.example", plan: "pro", status: "ok", windows: [w("5h", 40, "2026-11-15T07:00:00Z", "Gemini Pro"), w("week", 12, "2026-11-20T00:00:00Z", "Gemini Pro"), w("5h", 100, "2026-11-15T04:10:00Z", "Claude")], connectionId: "cpx-home", connectionName: "家里 NAS" },
-    { id: "e5f6", provider: "codex", email: "side@sak.example", plan: "plus", status: "expired", message: "credential rejected (401)", windows: [], connectionId: "cpx-home", connectionName: "家里 NAS" },
-    { id: "t1", provider: "codex", email: "dev1@starbridge.example", plan: "team", status: "ok", windows: [w("5h", 45, "2026-11-15T06:30:00Z"), w("week", 22, "2026-11-20T00:00:00Z")], connectionId: "cpx-hk", connectionName: "香港机" },
-    { id: "t2", provider: "codex", email: "dev2@starbridge.example", plan: "team", status: "limited", windows: [w("5h", 100, "2026-11-15T04:50:00Z"), w("week", 74, "2026-11-18T00:00:00Z")], connectionId: "cpx-hk", connectionName: "香港机" },
-    { id: "t3", provider: "codex", email: "pool-a@starbridge.example", plan: "team", status: "ok", windows: [w("5h", 10, "2026-11-15T08:00:00Z"), w("week", 35, "2026-11-21T00:00:00Z")], connectionId: "cpx-hk", connectionName: "香港机" },
-    { id: "t4", provider: "codex", email: "pool-b@starbridge.example", plan: "team", status: "ok", windows: [w("5h", 0, "2026-11-15T09:00:00Z"), w("week", 8, "2026-11-22T00:00:00Z")], connectionId: "cpx-hk", connectionName: "香港机" },
+    { id: "a1b2", provider: "codex", email: "sak@starbridge.example", plan: "pro", status: "ok", windows: [w("5h", 62, at("15", "13:40")), w("week", 38, at("19", "08:00"))], ...home },
+    { id: "c3d4", provider: "antigravity", email: "sak@starbridge.example", plan: "pro", status: "ok", windows: [w("5h", 40, at("15", "15:00"), "Gemini Pro"), w("week", 12, at("20", "08:00"), "Gemini Pro"), w("5h", 100, at("15", "12:10"), "Claude")], ...home },
+    { id: "e5f6", provider: "codex", email: "side@sak.example", plan: "plus", status: "expired", message: "credential rejected (401)", windows: [], ...home },
+    codex("h4", "lab-1@sak.example", "plus", 18, 9, home),
+    codex("h5", "lab-2@sak.example", "plus", 0, 3, home),
+    { id: "h6", provider: "antigravity", email: "lab-1@sak.example", plan: "free", status: "ok", windows: [w("5h", 5, at("15", "16:00"), "Gemini Pro")], ...home },
+    codex("t0", "owner@starbridge.example", "team", 20, 15, hk),
+    codex("t1", "dev1@starbridge.example", "team", 45, 22, hk),
+    codex("t2", "dev2@starbridge.example", "team", 100, 74, hk, "limited"),
+    codex("t3", "pool-a@starbridge.example", "team", 10, 35, hk),
+    codex("t4", "pool-b@starbridge.example", "team", 0, 8, hk),
+    codex("t5", "spare-07@pool.example", "team", 33, 51, hk),
+    codex("t6", "spare-08@pool.example", "team", 0, 0, hk),
+    codex("t7", "spare-09@pool.example", "team", 91, 66, hk),
+    codex("t8", "spare-10@pool.example", "team", 12, 40, hk),
+    codex("l1", "qa-1@starbridge.example", "plus", 0, 11, lab),
+    codex("l2", "qa-2@starbridge.example", "plus", 25, 30, lab),
+    codex("l3", "qa-3@starbridge.example", "plus", 50, 61, lab),
+  ],
+  prefs: [
+    { connectionId: "cpx-home", accountId: "a1b2", provider: "codex", email: "sak@starbridge.example", starred: true },
+    { connectionId: "cpx-home", accountId: "c3d4", provider: "antigravity", email: "sak@starbridge.example", starred: true },
+    { connectionId: "cpx-hk", accountId: "t0", provider: "codex", email: "owner@starbridge.example", starred: true },
+    { connectionId: "cpx-hk", accountId: "t1", provider: "codex", email: "dev1@starbridge.example", starred: true },
+    { connectionId: "cpx-hk", accountId: "t2", provider: "codex", email: "dev2@starbridge.example", starred: true },
+    // no email match: bound by hand to a team seat
+    { connectionId: "cpx-hk", accountId: "t5", provider: "codex", email: "spare-07@pool.example", starred: true, assetId: "gpt-team", member: "dev3@starbridge.example" },
   ],
 };

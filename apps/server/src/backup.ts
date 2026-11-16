@@ -4,6 +4,7 @@ import {
   buildBackup, planRestore, previewRestore, readBackup, SCHEMA_VERSION, todayIso,
   type BackupManifest, type DataDoc, type RestorePreview,
 } from "@fangcun/core";
+import { importCpaPrefs, readCpaPrefs } from "./cliproxyapi";
 import { HttpError, type Store } from "./store";
 
 export class BackupService {
@@ -34,7 +35,9 @@ export class BackupService {
   }
 
   dataDoc(): DataDoc {
-    return { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), assets: this.store.all(), settings: this.store.settings() };
+    // CLIProxyAPI: only 关注 and binds (connection id + name, account id, provider, email); never a token or an address
+    const cliproxyapi = readCpaPrefs(this.store);
+    return { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), assets: this.store.all(), settings: this.store.settings(), ...(cliproxyapi.length ? { cliproxyapi } : {}) };
   }
 
   async build(): Promise<Uint8Array> {
@@ -61,6 +64,8 @@ export class BackupService {
       applied = plan.put.length;
       if (plan.put.length) this.store.putMany(actor, plan.put, "restore-backup", "从备份合并");
     }
+    // 关注 / 绑定 of CLIProxyAPI accounts: replace swaps them, merge adds the backup's on top
+    if (mode === "replace" || b.data.cliproxyapi?.length) importCpaPrefs(this.store, b.data.cliproxyapi ?? [], mode);
     for (const [p, data] of Object.entries(b.attachments)) {
       const [assetId, name] = p.split("/");
       const target = this.attachmentPath(assetId, name);

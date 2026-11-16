@@ -1,5 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { diffAssets, normalizeAsset } from "./asset";
+import { normalizeCpaPrefs } from "./cliproxyapi";
 import { APP_VERSION, DEFAULT_SETTINGS, SCHEMA_VERSION, type Asset, type AuditEntry, type DataDoc, type Settings } from "./types";
 
 /**
@@ -104,6 +105,7 @@ export function migrateDoc(raw: unknown): DataDoc {
     exportedAt: doc.exportedAt ?? new Date().toISOString(),
     assets: assets.map((a) => normalizeAsset(a as unknown as Asset, (a as unknown as Asset).updatedAt)),
     settings: mergeSettings(doc.settings),
+    cliproxyapi: normalizeCpaPrefs((doc as { cliproxyapi?: unknown }).cliproxyapi),
   };
 }
 

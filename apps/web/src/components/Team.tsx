@@ -1,4 +1,4 @@
-import { perSeat, quotaForMembers, type QuotaAccount } from "@fangcun/core";
+import { normEmail, perSeat, quotaForMembers, type QuotaAccount } from "@fangcun/core";
 import clsx from "clsx";
 import type { Asset, TeamMember, Workspace } from "../data/types";
 import { useData } from "../lib/store";
@@ -8,7 +8,7 @@ import { Card } from "./ui";
 export function TeamCard({ asset }: { asset: Asset }) {
   const team = asset.team!;
   const { cpx } = useData();
-  const q = quotaForMembers(asset, cpx.accounts);
+  const q = quotaForMembers(asset, cpx.accounts, cpx.prefs);
   const seats = team.workspaces.reduce((s, w) => s + w.seats, 0);
   const used = team.workspaces.reduce((s, w) => s + w.members.length, 0);
   return (
@@ -26,7 +26,7 @@ function WorkspaceBlock({ w, q }: { w: Workspace; q: Map<string, QuotaAccount[]>
   const members = w.members.filter((m) => m.role !== "owner");
   const used = w.members.length;
   const d = daysUntil(w.expiresAt);
-  const hasQuota = members.some((m) => q.has(m.email.toLowerCase()));
+  const hasQuota = members.some((m) => q.has(normEmail(m.email)));
   const meta = [w.region, w.discount, `${used}/${w.seats} 席`, w.seats ? `人均 ${money(Math.round(perSeat(w.price, w.seats) * 10) / 10, w.currency)}` : ""].filter(Boolean).join(" · ");
   return (
     <div className="border-t border-line px-4 pt-3 pb-2">
@@ -41,7 +41,7 @@ function WorkspaceBlock({ w, q }: { w: Workspace; q: Map<string, QuotaAccount[]>
           <span>成员</span>{hasQuota && <><span>5 小时剩余</span><span>每周剩余</span></>}
         </div>
       )}
-      {members.map((m) => <MemberRow key={m.email} m={m} quota={hasQuota} acc={q.get(m.email.toLowerCase())?.[0]} />)}
+      {members.map((m) => <MemberRow key={m.email} m={m} quota={hasQuota} acc={q.get(normEmail(m.email))?.[0]} />)}
       {used < w.seats && <div className="py-1.5 text-xs text-subtle">空席位 {w.seats - used}</div>}
     </div>
   );

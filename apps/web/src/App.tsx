@@ -7,6 +7,7 @@ import { AssetList, matchFilter, type ListFilter } from "./components/AssetList"
 import { Costs } from "./components/Costs";
 import { Login } from "./components/Login";
 import { Overview } from "./components/Overview";
+import { QuotaPage } from "./components/QuotaPage";
 import { Rail, type Section } from "./components/Rail";
 import { Servers } from "./components/Servers";
 import { Settings } from "./components/Settings";
@@ -17,7 +18,7 @@ import { compareAssets } from "@fangcun/core";
 import { getToday, remindDays } from "./lib/fmt";
 import { DataProvider, isDemo, useData, type Me } from "./lib/store";
 
-/** Hash routes: #/overview · #/assets/<id>?type=server · #/servers · #/costs · #/settings/<tab> — plus ?theme=dark&demo=1. */
+/** Hash routes: #/overview · #/assets/<id>?type=server · #/servers · #/quota · #/costs · #/settings/<tab> — plus ?theme=dark&demo=1. */
 function parse() {
   const [path, q = ""] = location.hash.replace(/^#\/?/, "").split("?");
   const [section, id] = path.split("/");
@@ -96,6 +97,7 @@ function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void
           </>
         )}
         {route.section === "servers" && <Servers onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} />}
+        {route.section === "quota" && <QuotaPage onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} onNav={go} />}
         {route.section === "costs" && <Costs onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} />}
         {route.section === "settings" && <Settings tab={route.id} onTab={(t) => go(`/settings/${t}`)} />}
       </>}

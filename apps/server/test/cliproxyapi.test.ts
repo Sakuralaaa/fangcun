@@ -82,6 +82,47 @@ describe("CLIProxyAPI connections", () => {
     expect(all).not.toContain("cpa.example.com");
   });
 
+  it("stars and binds accounts in 方寸 only: GET only to CLIProxyAPI, audit, permissions, validation", async () => {
+    const n = requests.length;
+    const id = cliproxy.list()[0].id;
+    expect((await call("POST", "/api/assets", { body: { id: "plus", type: "subscription", name: "ChatGPT Plus", price: 20, currency: "USD", cycle: "month" } })).status).toBe(200);
+    expect((await call("POST", "/api/assets", { body: { id: "srv", type: "server", name: "hk", price: 5, currency: "USD", cycle: "month" } })).status).toBe(200);
+    expect((await call("PUT", `/api/cliproxyapi/accounts/${id}/a1`, { body: { starred: true }, token: tokens.read })).status).toBe(403);
+    expect((await call("PUT", `/api/cliproxyapi/accounts/${id}/nope`, { body: { starred: true } })).status).toBe(404);
+    expect((await call("PUT", `/api/cliproxyapi/accounts/${id}/a1`, { body: { assetId: "srv" } })).status).toBe(400);
+    expect((await call("PUT", `/api/cliproxyapi/accounts/${id}/a1`, { body: { assetId: "plus", member: "x@y.com" } })).status).toBe(400);
+    let r = (await (await call("PUT", `/api/cliproxyapi/accounts/${id}/a1`, { body: { starred: true } })).json()) as any;
+    expect(r.prefs).toEqual([{ connectionId: id, accountId: "a1", provider: "codex", email: "dev@example.com", starred: true, assetId: null, member: null, connectionName: "家里 NAS" }]);
+    r = (await (await call("PUT", `/api/cliproxyapi/accounts/${id}/a2`, { body: { assetId: "plus" }, token: tokens.full })).json()) as any;
+    expect(r.prefs.find((p: any) => p.accountId === "a2")).toMatchObject({ starred: false, assetId: "plus" });
+    const d = (await (await call("GET", "/api/cliproxyapi", { token: tokens.read })).json()) as any;
+    expect(d.prefs).toHaveLength(2);
+    expect(requests.slice(n)).toEqual([]);
+    expect(store.db.prepare("SELECT summary FROM audit WHERE action = 'cliproxyapi-account'").all().map((x: any) => x.summary)).toEqual([
+      "CLIProxyAPI 账号 dev@example.com：关注", "CLIProxyAPI 账号 ag@example.com：绑定到「ChatGPT Plus」"]);
+    // unstar + unbind removes the row
+    await call("PUT", `/api/cliproxyapi/accounts/${id}/a2`, { body: { assetId: null } });
+    expect(cliproxy.prefs().map((p) => p.accountId)).toEqual(["a1"]);
+    await call("PUT", `/api/cliproxyapi/accounts/${id}/a2`, { body: { assetId: "plus" } });
+  });
+
+  it("backups and the JSON export carry 关注 / binds (no token, no address); restore finds the connection by name", async () => {
+    const id = cliproxy.list()[0].id;
+    const bytes = await backup.build();
+    const b = await readBackup(bytes);
+    expect(b.data.cliproxyapi?.map((p) => [p.accountId, p.starred, p.assetId, p.connectionName])).toEqual([["a1", true, null, "家里 NAS"], ["a2", false, "plus", "家里 NAS"]]);
+    const exp = await (await call("GET", "/api/export/json", { token: tokens.full })).text();
+    expect(exp).toContain('"cliproxyapi"');
+    expect(exp).not.toContain(TOKEN);
+    // the connection got a new id (re-added): replace restore maps the rows by name
+    store.db.prepare("UPDATE cliproxyapi_connections SET id = 'cpx_new' WHERE id = ?").run(id);
+    store.db.exec("DELETE FROM cliproxyapi_accounts");
+    await backup.restore(bytes, "replace", "sak");
+    expect(cliproxy.prefs().map((p) => `${p.connectionId}/${p.accountId}`)).toEqual(["cpx_new/a1", "cpx_new/a2"]);
+    store.db.prepare("UPDATE cliproxyapi_connections SET id = ? WHERE id = 'cpx_new'").run(id);
+    store.db.prepare("UPDATE cliproxyapi_accounts SET connection_id = ? WHERE connection_id = 'cpx_new'").run(id);
+  });
+
   it("a rotated token shows as an error on that connection", async () => {
     const id = cliproxy.list()[0].id;
     store.db.prepare("UPDATE cliproxyapi_connections SET token = ? WHERE id = ?").run("fcq_" + "B".repeat(43), id);
@@ -93,5 +134,8 @@ describe("CLIProxyAPI connections", () => {
     const id = cliproxy.list()[1].id;
     expect((await call("DELETE", `/api/cliproxyapi/connections/${id}`)).status).toBe(200);
     expect(cliproxy.list()).toHaveLength(1);
+    const left = cliproxy.list()[0].id;
+    expect((await call("DELETE", `/api/cliproxyapi/connections/${left}`)).status).toBe(200);
+    expect(cliproxy.prefs()).toEqual([]);
   });
 });

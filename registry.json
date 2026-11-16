@@ -6,7 +6,7 @@
       "name": "Fangcun quota feed",
       "description": "Read-only quota feed for Fangcun (方寸): Codex and Antigravity accounts' plan, status and quota windows, behind a feed token of its own. Adds a panel with a connection string to paste into Fangcun.",
       "author": "Sakuralaaa",
-      "version": "0.1.9",
+      "version": "0.1.10",
       "repository": "https://github.com/Sakuralaaa/fangcun",
       "homepage": "https://github.com/Sakuralaaa/fangcun",
       "license": "MIT",
