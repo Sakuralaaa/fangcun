@@ -1,6 +1,6 @@
 import { cleanSecret } from "./secrets";
 import {
-  applyKomari, assetFromClient, mapStatus, stableJson, summarizePing,
+  applyKomari, assetFromClient, homepagePingBindings, mapStatus, stableJson, summarizePing,
   type Asset, type KomariClient, type KomariPingRecords, type KomariRecord, type NodePing, type NodeStatus, type Op, type PingState,
 } from "@fangcun/core";
 import { tx } from "./db";
@@ -8,7 +8,7 @@ import { HttpError, type Store } from "./store";
 
 /**
  * Read-only Komari client. Only these requests can leave this module:
- *   GET  /api/admin/client/list
+ *   GET  /api/admin/client/list · /api/public
  *   POST /api/rpc2  common:getNodesLatestStatus · common:getVersion
  *   POST /api/rpc2  common:getRecords, and only with type "ping" (latency history; read-only query)
  * Anything else throws before a socket is opened. No write, exec or terminal endpoint is reachable.
@@ -21,10 +21,10 @@ const PARAM_RPC: Record<string, (p: Record<string, unknown>) => boolean> = {
     Object.keys(p).every((k) => ["type", "hours", "uuid", "task_id", "maxCount"].includes(k)) &&
     (p.hours === undefined || (Number.isInteger(p.hours) && (p.hours as number) >= 1 && (p.hours as number) <= 24)),
 };
-type Endpoint = { method: "GET"; path: "/api/admin/client/list" } | { method: "POST"; path: "/api/rpc2"; rpc: string; params?: Record<string, unknown> };
+type Endpoint = { method: "GET"; path: "/api/admin/client/list" | "/api/public" } | { method: "POST"; path: "/api/rpc2"; rpc: string; params?: Record<string, unknown> };
 
 export function assertAllowed(e: Endpoint): void {
-  if (e.method === "GET" && e.path === "/api/admin/client/list") return;
+  if (e.method === "GET" && (e.path === "/api/admin/client/list" || e.path === "/api/public")) return;
   if (e.method === "POST" && e.path === "/api/rpc2") {
     const p = e.params ?? {};
     if (ALLOWED_RPC.has(e.rpc) && !Object.keys(p).length) return;
@@ -112,7 +112,7 @@ export class KomariService {
   }
 
   /**
-   * Last hour of ping results for all nodes, one rpc call, cached for a minute.
+   * Last hour of ping results, using the theme's homepage task bindings when available.
    * A failure (older Komari without the method, timeout) only hides the latency row; it never fails the status.
    */
   async ping(maxAgeMs = 60_000): Promise<{ state: PingState; nodes: Record<string, NodePing> }> {
@@ -122,8 +122,11 @@ export class KomariService {
     const to = Date.now();
     let next: { at: number; state: PingState; nodes: Record<string, NodePing> };
     try {
-      const res = await this.call<KomariPingRecords>({ method: "POST", path: "/api/rpc2", rpc: "common:getRecords", params: { type: "ping", hours: 1, maxCount: 20000 } });
-      const nodes = summarizePing(res, to - 3_600_000, to);
+      const [res, publicInfo] = await Promise.all([
+        this.call<KomariPingRecords>({ method: "POST", path: "/api/rpc2", rpc: "common:getRecords", params: { type: "ping", hours: 1, maxCount: 20000 } }),
+        this.call<unknown>({ method: "GET", path: "/api/public" }).catch(() => undefined),
+      ]);
+      const nodes = summarizePing(res, to - 3_600_000, to, 24, homepagePingBindings(publicInfo));
       next = { at: to, state: Object.keys(nodes).length ? "ok" : "empty", nodes };
     } catch {
       next = { at: to, state: "unavailable", nodes: c?.state === "ok" ? c.nodes : {} };

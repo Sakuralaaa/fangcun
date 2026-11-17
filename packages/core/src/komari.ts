@@ -267,19 +267,46 @@ export function mapStatus(uuid: string, r: KomariRecord, client?: KomariClient, 
   };
 }
 
-/** rpc2 common:getRecords {type:"ping"} result in Komari 1.2.5 (web/rpc/jsonrpc/common.record.go). value < 0 = lost. */
+/** rpc2 common:getRecords {type:"ping"} result in Komari 1.2.5. */
 export interface KomariPingRecords {
   count?: number;
   records?: { task_id?: number; time?: string; value?: number; client?: string }[];
   tasks?: { id?: number; name?: string }[];
 }
 
+/** Read komaritheme's task-id → node UUID bindings from Komari's public settings.
+ * Undefined means the active theme does not expose bindings; an empty object means
+ * it explicitly has no bound nodes. Duplicate bindings use the lowest task ID,
+ * matching the theme's homepage.
+ */
+export function homepagePingBindings(publicInfo: unknown): Record<string, number> | undefined {
+  if (!publicInfo || typeof publicInfo !== "object") return undefined;
+  const data = (publicInfo as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return undefined;
+  const settings = (data as { theme_settings?: unknown }).theme_settings;
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return undefined;
+  const raw = (settings as { homepagePingBindings?: unknown }).homepagePingBindings;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const bindings: Record<string, number> = Object.create(null);
+  const tasks = Object.entries(raw).sort(([a], [b]) => Number(a) - Number(b));
+  for (const [key, nodes] of tasks) {
+    const task = Number(key);
+    if (!Number.isInteger(task) || task <= 0 || !Array.isArray(nodes)) continue;
+    for (const node of nodes) {
+      if (typeof node !== "string" || !node.trim()) continue;
+      const uuid = node.trim();
+      if (bindings[uuid] === undefined) bindings[uuid] = task;
+    }
+  }
+  return bindings;
+}
+
 /**
- * Per-node ping summary for the card bars. For each node the task with the most samples is used
- * (a node may be probed by several tasks; mixing them would blend unrelated targets).
+ * Per-node ping summary for the card bars. Use the homepage's bound task when
+ * available; otherwise choose the task with the most samples for compatibility.
  * Samples are spread over `slots` equal time slots between from and to.
  */
-export function summarizePing(res: KomariPingRecords | null | undefined, from: number, to: number, slots = 24): Record<string, NodePing> {
+export function summarizePing(res: KomariPingRecords | null | undefined, from: number, to: number, slots = 24, bindings?: Record<string, number>): Record<string, NodePing> {
   const names = new Map((res?.tasks ?? []).map((t) => [Number(t.id), String(t.name ?? `任务 ${t.id}`)]));
   const byNode = new Map<string, Map<number, { t: number; v: number; i: number }[]>>();
   (res?.records ?? []).forEach((r, i) => {
@@ -295,23 +322,27 @@ export function summarizePing(res: KomariPingRecords | null | undefined, from: n
   const span = Math.max(1, to - from);
   const out: Record<string, NodePing> = {};
   for (const [uuid, tasks] of byNode) {
-    const [task, samples] = [...tasks.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0])[0];
+    const selected = bindings ? (bindings[uuid] === undefined ? undefined : [bindings[uuid], tasks.get(bindings[uuid])] as const)
+      : [...tasks.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0])[0];
+    if (!selected) continue;
+    const task = selected[0], samples = selected[1];
+    if (!samples?.length) continue;
     const timed = samples.every((x) => Number.isFinite(x.t));
     samples.sort((a, b) => (timed ? a.t - b.t : a.i - b.i));
     const slot = samples.map((x, k) => (timed ? Math.min(slots - 1, Math.max(0, Math.floor(((x.t - from) / span) * slots))) : Math.min(slots - 1, Math.floor((k / samples.length) * slots))));
     const buckets: NodePing["buckets"] = [];
     for (let b = 0; b < slots; b++) {
       const vs = samples.filter((_, k) => slot[k] === b);
-      const ok = vs.filter((x) => x.v >= 0);
+      const ok = vs.filter((x) => x.v > 0);
       buckets.push({
         ms: ok.length ? Math.round(ok.reduce((s, x) => s + x.v, 0) / ok.length) : null,
         loss: vs.length ? Math.round(((vs.length - ok.length) / vs.length) * 1000) / 10 : null,
       });
     }
-    const ok = samples.filter((x) => x.v >= 0);
+    const ok = samples.filter((x) => x.v > 0);
     out[uuid] = {
       task: names.get(task) ?? `任务 ${task}`,
-      latest: ok.length ? ok[ok.length - 1].v : null,
+      latest: samples[samples.length - 1].v > 0 ? samples[samples.length - 1].v : null,
       avg: ok.length ? Math.round(ok.reduce((s, x) => s + x.v, 0) / ok.length) : null,
       loss: Math.round(((samples.length - ok.length) / samples.length) * 1000) / 10,
       buckets,

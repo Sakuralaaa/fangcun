@@ -21,6 +21,9 @@ const fakeFetch = (async (url: string, init: RequestInit) => {
   const body = init.body ? JSON.parse(String(init.body)) : null;
   calls.push(`${init.method} ${u.pathname}${body ? ` ${body.method}` : ""}`);
   expect((init.headers as Record<string, string>).Authorization).toBe("Bearer test-key");
+  if (u.pathname === "/api/public") {
+    return Response.json({ data: { theme_settings: { homepagePingBindings: { "4": ["node-1"] } } } });
+  }
   if (u.pathname === "/api/admin/client/list") {
     return Response.json([
       { uuid: "node-1", token: "SECRET-AGENT-TOKEN", name: "hk-api-02", cpu_cores: 4, cpu_name: "EPYC", os: "Ubuntu 24.04", ipv4: "192.0.2.11", region: "香港", mem_total: 8 * 1024 ** 3, disk_total: 80 * 1024 ** 3, price: komariPrice, billing_cycle: 30, currency: "$", expired_at: "2026-11-22T00:00:00+08:00", auto_renewal: false, traffic_limit: 1024 ** 4, traffic_limit_type: "sum", version: "1.5.11", tags: "" },
@@ -141,7 +144,8 @@ describe("令牌权限", () => {
 });
 
 describe("Komari（只读）", () => {
-  it("only ever calls the two read endpoints", () => {
+  it("only allows designated read endpoints", () => {
+    expect(() => assertAllowed({ method: "GET", path: "/api/public" })).not.toThrow();
     expect(() => assertAllowed({ method: "POST", path: "/api/rpc2", rpc: "admin:editClient" })).toThrow(/blocked/);
     expect(() => assertAllowed({ method: "GET", path: "/api/admin/client/x/token" as never })).toThrow(/blocked/);
   });
@@ -179,10 +183,10 @@ describe("Komari（只读）", () => {
     const st = await json(call("GET", "/api/komari/status"));
     expect(st.data.nodes["node-1"]).toMatchObject({ online: true, cpu: 12.5, trafficType: "sum", trafficLimit: 1024 ** 4, cores: 4, os: "Ubuntu 24.04", region: "香港" });
     expect(st.data.ping).toBe("ok");
-    // the task with most samples wins; one of its four samples was lost
-    expect(st.data.nodes["node-1"].ping).toMatchObject({ task: "CN 联通", latest: 50, avg: 50, loss: 25 });
+    // The homepage binding selects task 4 even though task 3 has more samples.
+    expect(st.data.nodes["node-1"].ping).toMatchObject({ task: "其他", latest: 900, avg: 900, loss: 0 });
     expect(st.data.nodes["node-1"].ping.buckets).toHaveLength(24);
-    expect(calls.every((c) => ["GET /api/admin/client/list", "POST /api/rpc2 common:getNodesLatestStatus", "POST /api/rpc2 common:getVersion", "POST /api/rpc2 common:getRecords"].includes(c))).toBe(true);
+    expect(calls.every((c) => ["GET /api/admin/client/list", "GET /api/public", "POST /api/rpc2 common:getNodesLatestStatus", "POST /api/rpc2 common:getVersion", "POST /api/rpc2 common:getRecords"].includes(c))).toBe(true);
   });
 });
 

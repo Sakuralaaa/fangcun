@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyKomari, DEFAULT_SETTINGS, komariCycle, komariDate, mapClient, mapStatus, markOverrides, normalizeAsset, restoreKomariField, summarizePing, trafficUsed, type KomariClient } from "../src";
+import { applyKomari, DEFAULT_SETTINGS, homepagePingBindings, komariCycle, komariDate, mapClient, mapStatus, markOverrides, normalizeAsset, restoreKomariField, summarizePing, trafficUsed, type KomariClient } from "../src";
 
 // Shaped like Komari 1.2.5 GET /api/admin/client/list
 const client: KomariClient = {
@@ -79,7 +79,7 @@ describe("延迟/丢包汇总", () => {
         { task_id: 2, client: "b", time: t(30), value: -1 },
       ],
     }, from, to, 12);
-    expect(p.a).toMatchObject({ task: "电信", latest: 50, avg: 40, loss: 33.3 });
+    expect(p.a).toMatchObject({ task: "电信", latest: null, avg: 40, loss: 33.3 });
     expect(p.a.buckets).toHaveLength(12);
     expect(p.a.buckets[0]).toEqual({ ms: 40, loss: 0 });
     expect(p.a.buckets[11]).toEqual({ ms: null, loss: 100 });
@@ -89,6 +89,35 @@ describe("延迟/丢包汇总", () => {
   it("is empty without records", () => {
     expect(summarizePing(null, from, to)).toEqual({});
     expect(summarizePing({ records: [], tasks: [] }, from, to)).toEqual({});
+  });
+  it("uses homepage task bindings instead of the task with most samples", () => {
+    const bindings = homepagePingBindings({ data: { theme_settings: { homepagePingBindings: { "3": ["a"], "1": ["b"] } } } });
+    const result = summarizePing({
+      tasks: [{ id: 1, name: "CF-ICMP" }, { id: 3, name: "China-TCP" }],
+      records: [
+        { client: "a", task_id: 1, time: t(1), value: -1 },
+        { client: "a", task_id: 1, time: t(2), value: -1 },
+        { client: "a", task_id: 3, time: t(3), value: 29 },
+        { client: "b", task_id: 3, time: t(3), value: 5 },
+        { client: "c", task_id: 3, time: t(3), value: 9 },
+      ],
+    }, from, to, 24, bindings);
+    expect(result.a).toMatchObject({ task: "China-TCP", latest: 29, loss: 0 });
+    expect(result.b).toBeUndefined(); // bound task has no samples
+    expect(result.c).toBeUndefined(); // homepage has no binding
+  });
+  it("parses homepage bindings like the theme and falls back when unavailable", () => {
+    expect(homepagePingBindings({ data: { theme_settings: { homepagePingBindings: { "3": ["a", " b "], "1": ["a"], "x": ["c"] } } } })).toEqual({ a: 1, b: 3 });
+    expect(homepagePingBindings({ data: { theme_settings: { homepagePingBindings: {} } } })).toEqual({});
+    expect(homepagePingBindings({ data: { theme_settings: {} } })).toBeUndefined();
+    expect(homepagePingBindings(null)).toBeUndefined();
+  });
+  it("treats zero and a failed latest sample like the homepage", () => {
+    const p = summarizePing({ records: [
+      { client: "a", task_id: 3, time: t(1), value: 12 },
+      { client: "a", task_id: 3, time: t(2), value: 0 },
+    ] }, from, to, 24, { a: 3 });
+    expect(p.a).toMatchObject({ latest: null, avg: 12, loss: 50 });
   });
   it("maps group / cores / os / region into the status", () => {
     const s = mapStatus("7f3c-hk02", { online: true }, { ...client, group: " 主力 " });
