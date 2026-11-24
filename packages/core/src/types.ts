@@ -1,7 +1,7 @@
 import type { CpaPref } from "./cliproxyapi";
 /** Data schema version. Bump together with a migration in backup.ts. */
 export const SCHEMA_VERSION = 3;
-export const APP_VERSION = "0.1.11";
+export const APP_VERSION = "0.1.12";
 
 export const ASSET_TYPES = [
   "server", "domain", "cert", "subscription", "mail", "phone", "payment", "account", "document",
@@ -88,6 +88,14 @@ export interface PaymentInfo {
   fees?: string;            // 开卡费 / 充值手续费 (free text)
   billingRegion?: string;   // 账单地区
   status: CardStatus;
+  /** 可选：当前卡内余额（手填，用于计算扣费缺口与提醒充值）。 */
+  balance?: number | null;
+  /** 余额币种（默认同卡片资产币种）。 */
+  balanceCurrency?: string;
+  /** 上次记录余额的日期（YYYY-MM-DD）。 */
+  balanceUpdatedAt?: string | null;
+  /** 可选：安全底线 / 额外预留余量（扣完待付后希望卡里至少剩下的金额，按余额币种计）。 */
+  reserveBuffer?: number | null;
 }
 
 export interface PhoneInfo {

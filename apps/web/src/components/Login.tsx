@@ -25,9 +25,25 @@ export function Login({ setup, onDone }: { setup: boolean; onDone: () => void })
     setBusy(false);
   };
   return (
-    <div className="grid h-full place-items-center bg-bg px-6">
-      <form onSubmit={submit} className="w-full max-w-[380px] rounded-lg border border-line bg-panel p-7 shadow-[0_8px_30px_rgb(0_0_0/0.04)]">
-        <div className="flex items-center gap-3"><Logo size={34} /><div><div className="text-[18px] font-bold tracking-tight">方寸</div><div className="text-xs text-subtle">个人资产台账</div></div></div>
+    <div
+      className="grid h-full place-items-center bg-bg px-6"
+      style={{
+        backgroundImage: "radial-gradient(color-mix(in srgb, var(--color-ink) 7%, transparent) 1px, transparent 1px)",
+        backgroundSize: "22px 22px",
+      }}
+    >
+      <form
+        onSubmit={submit}
+        className="fc-animate-pop w-full max-w-[390px] rounded-lg border border-line bg-panel p-7"
+        style={{ boxShadow: "var(--shadow-float)" }}
+      >
+        <div className="flex items-center gap-3">
+          <Logo size={36} />
+          <div>
+            <div className="text-[19px] leading-tight font-bold tracking-tight">方寸</div>
+            <div className="mt-0.5 text-xs text-subtle">个人资产台账 · 到期与预留管理</div>
+          </div>
+        </div>
         <h1 className="mt-6 text-[15px] font-semibold">{setup ? "第一次使用：设置管理员账号" : needCode ? "输入两步验证动态码" : "登录"}</h1>
         <div className="mt-4 flex flex-col gap-3">
           {!needCode && <>

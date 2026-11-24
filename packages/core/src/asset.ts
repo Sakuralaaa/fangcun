@@ -183,6 +183,18 @@ export function normalizeAsset(input: AssetInput & Partial<Asset>, now = new Dat
     const exp = str(p.cardExpiry, 7);
     if (exp && !/^\d{4}-(0[1-9]|1[0-2])$/.test(exp)) throw new ValidationError("卡片有效期用 YYYY-MM 格式，如 2028-09");
     const status = CARD_STATUS.includes(p.status) ? p.status : "active";
+    const optMoney = (v: unknown, label: string): number | null | undefined => {
+      if (v === undefined) return undefined;
+      if (v === null || v === "") return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) throw new ValidationError(`${label}需要是非负数字`);
+      return Math.round(n * 100) / 100;
+    };
+    const balance = optMoney(p.balance, "卡内余额");
+    const reserveBuffer = optMoney(p.reserveBuffer, "最低预留底线");
+    const balCurRaw = str(p.balanceCurrency, 8)?.toUpperCase();
+    if (balCurRaw && !/^[A-Z]{3,5}$/.test(balCurRaw)) throw new ValidationError("余额币种用 3 位字母代码，如 USD、CNY");
+    const balanceUpdatedAt = p.balanceUpdatedAt === undefined ? undefined : date(p.balanceUpdatedAt, "余额更新日期");
     a.payment = {
       issuer: str(p.issuer, 100) ?? a.provider ?? "",
       network: str(p.network, 40),
@@ -191,6 +203,10 @@ export function normalizeAsset(input: AssetInput & Partial<Asset>, now = new Dat
       fees: str(p.fees, 500),
       billingRegion: str(p.billingRegion, 60),
       status,
+      ...(balance !== undefined ? { balance } : {}),
+      ...(balCurRaw ? { balanceCurrency: balCurRaw } : {}),
+      ...(balanceUpdatedAt !== undefined ? { balanceUpdatedAt } : {}),
+      ...(reserveBuffer !== undefined ? { reserveBuffer } : {}),
     };
     if (!a.payment.issuer) throw new ValidationError("支付类型需要填写发卡平台");
     if (!a.provider) a.provider = a.payment.issuer;

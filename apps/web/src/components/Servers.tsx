@@ -142,7 +142,7 @@ export function Servers({ onSelect }: { onSelect: (id: string) => void }) {
 
 function Summary({ label, value, right, children }: { label: string; value: ReactNode; right: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex min-w-0 flex-col rounded-md border border-line bg-panel px-5 pt-4 pb-4">
+    <section className="surface-card flex min-w-0 flex-col px-5 pt-4 pb-4">
       <div className="text-[12px] text-muted">{label}</div>
       <div className="mt-1.5 flex items-baseline leading-none tracking-tight">{value}</div>
       <div className="mt-auto flex items-end gap-3 pt-3.5">
@@ -196,7 +196,7 @@ function Pills({ a, max = 3, projects }: { a: Asset; max?: number; projects?: nu
 }
 
 const cardCls = (on: boolean) => clsx(
-  "group flex h-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-md border border-line bg-panel text-left transition-shadow hover:shadow-[0_2px_14px_rgb(0_0_0/0.07)] focus-visible:outline-2 focus-visible:outline-ink/30",
+  "surface-card-interactive group flex h-full min-w-0 cursor-pointer flex-col overflow-hidden text-left focus-visible:outline-2 focus-visible:outline-ink/30",
   !on && "[&>*]:opacity-55 [&>*]:grayscale",
 );
 

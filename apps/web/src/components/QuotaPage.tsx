@@ -99,10 +99,10 @@ function Connection({ c, all, mine, open, managing, match, onToggle, onManage, o
   const low = mine.filter(isLow).length;
   const bodyId = `cpx-body-${c.id}`;
   return (
-    <section className="@container overflow-hidden rounded-md border border-line bg-panel">
+    <section className="@container surface-card overflow-hidden">
       <div className="flex min-h-12 items-center gap-1 pr-2">
         <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={bodyId}
-          className="flex min-w-0 flex-1 items-center gap-2.5 self-stretch py-2 pl-3 text-left outline-none focus-visible:bg-field/60">
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 self-stretch py-2 pl-3 text-left outline-none transition-colors hover:bg-field/40 focus-visible:bg-field/60">
           <ChevronRight size={16} className={clsx("shrink-0 text-muted transition-transform", open && "rotate-90")} />
           <span className="shrink-0 text-[14px] font-semibold whitespace-nowrap">{c.name}</span>
           {c.note && <span className="min-w-0 truncate text-[13px] text-subtle max-sm:hidden">{c.note}</span>}

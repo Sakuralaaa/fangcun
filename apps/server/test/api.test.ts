@@ -240,6 +240,29 @@ describe("备份", () => {
     const ics = await (await call("GET", "/api/export/ics", { token: tokens.full })).text();
     expect(ics).toContain("BEGIN:VEVENT");
   });
+
+  it("serves attachments inline for safe previewable types and neutralises unsafe HTML inline", async () => {
+    await call("POST", "/api/assets", { token: tokens.full, body: { id: "doc1", type: "document", name: "合同文档", cycle: "once" } });
+    const pdfBytes = new TextEncoder().encode("%PDF-1.4\n%test");
+    expect((await call("POST", "/api/assets/doc1/attachments?name=report.pdf", { token: tokens.full, raw: pdfBytes })).status).toBe(200);
+
+    const dl = await call("GET", "/api/assets/doc1/attachments/report.pdf", { token: tokens.full });
+    expect(dl.status).toBe(200);
+    expect(dl.headers.get("content-disposition")).toContain("attachment");
+    expect(dl.headers.get("content-type")).toBe("application/pdf");
+    expect(dl.headers.get("x-content-type-options")).toBe("nosniff");
+
+    const view = await call("GET", "/api/assets/doc1/attachments/report.pdf?inline=1", { token: tokens.full });
+    expect(view.status).toBe(200);
+    expect(view.headers.get("content-disposition")).toContain("inline");
+    expect(view.headers.get("content-type")).toBe("application/pdf");
+
+    const htmlBytes = new TextEncoder().encode("<script>alert(1)</script>");
+    expect((await call("POST", "/api/assets/doc1/attachments?name=note.html", { token: tokens.full, raw: htmlBytes })).status).toBe(200);
+    const safeHtml = await call("GET", "/api/assets/doc1/attachments/note.html?inline=1", { token: tokens.full });
+    expect(safeHtml.status).toBe(200);
+    expect(safeHtml.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  });
 });
 
 describe("关注 / 置顶", () => {

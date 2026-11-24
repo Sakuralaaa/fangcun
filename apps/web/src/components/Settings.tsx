@@ -22,7 +22,7 @@ export function Settings({ tab = "general", onTab }: { tab?: string; onTab: (t: 
       <aside className="w-[200px] shrink-0 border-r border-line bg-panel px-3 py-5 max-md:hidden lg:w-[220px]">
         <h2 className="mb-3 px-2 text-[17px] font-bold">设置</h2>
         {SETTINGS_TABS.map(([k, n]) => (
-          <button key={k} onClick={() => onTab(k)} className={clsx("flex h-9 w-full items-center rounded-sm px-2.5 text-left text-[13px] whitespace-nowrap", k === current ? "bg-sel font-semibold text-accent" : "text-muted hover:bg-field")}>{n}</button>
+          <button key={k} onClick={() => onTab(k)} className={clsx("flex h-9 w-full cursor-pointer items-center rounded-sm px-2.5 text-left text-[13px] whitespace-nowrap transition-colors", k === current ? "bg-sel font-semibold text-accent" : "text-muted hover:bg-field hover:text-ink")}>{n}</button>
         ))}
       </aside>
       <div className="shrink-0 border-b border-line bg-panel pt-3 md:hidden">

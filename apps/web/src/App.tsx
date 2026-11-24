@@ -1,10 +1,12 @@
+import { compareAssets, computeCardReserves } from "@fangcun/core";
 import clsx from "clsx";
 import { ShieldCheck } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AssetDetail } from "./components/AssetDetail";
 import { AssetForm } from "./components/AssetForm";
 import { AssetList, matchFilter, type ListFilter } from "./components/AssetList";
-import { Costs } from "./components/Costs";
+import { CommandPalette } from "./components/CommandPalette";
+import { Costs, type CostsTab } from "./components/Costs";
 import { Login } from "./components/Login";
 import { Overview } from "./components/Overview";
 import { QuotaPage } from "./components/QuotaPage";
@@ -14,11 +16,10 @@ import { Settings } from "./components/Settings";
 import { Button, Field, Modal, TextInput } from "./components/ui";
 import type { AssetType } from "./data/types";
 import { get, onStepUp, post } from "./lib/api";
-import { compareAssets } from "@fangcun/core";
 import { getToday, remindDays } from "./lib/fmt";
 import { DataProvider, isDemo, useData, type Me } from "./lib/store";
 
-/** Hash routes: #/overview · #/assets/<id>?type=server · #/servers · #/quota · #/costs · #/settings/<tab> — plus ?theme=dark&demo=1. */
+/** Hash routes: #/overview · #/assets/<id>?type=server · #/servers · #/quota · #/costs(/cards) · #/settings/<tab> — plus ?theme=dark&demo=1. */
 function parse() {
   const [path, q = ""] = location.hash.replace(/^#\/?/, "").split("?");
   const [section, id] = path.split("/");
@@ -56,10 +57,11 @@ export default function App() {
 }
 
 function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void; onLogout: () => void }) {
-  const { assets, loading, me, demo } = useData();
+  const { assets, settings, loading, me, demo } = useData();
   const [route, setRoute] = useState(parse);
   const [form, setForm] = useState<{ id?: string; type?: AssetType } | null>(null);
   const [stepUp, setStepUp] = useState<((ok: boolean) => void) | null>(null);
+  const [cmdOpen, setCmdOpen] = useState(false);
 
   useEffect(() => {
     const on = () => setRoute(parse());
@@ -69,8 +71,18 @@ function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void
   useEffect(() => {
     onStepUp(() => new Promise<boolean>((resolve) => setStepUp(() => resolve)));
   }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCmdOpen((o) => !o);
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
 
-  const go = (path: string) => { location.hash = path; };
+  const go = useCallback((path: string) => { location.hash = path; }, []);
   const nav = (s: Section) => {
     if (s === "accounts") return go("/assets?type=account");
     if (s === "docs") return go("/assets?type=document");
@@ -78,16 +90,41 @@ function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void
   };
   const select = (id: string) => go(`/assets/${encodeURIComponent(id)}${route.section === "assets" && route.type !== "all" ? `?type=${route.type}` : ""}`);
 
-  const filtered = assets.filter((a) => matchFilter(a, route.type)).sort((a, b) => compareAssets(a, b, getToday()));
+  const today = getToday();
+  const filtered = assets.filter((a) => matchFilter(a, route.type)).sort((a, b) => compareAssets(a, b, today));
   const asset = assets.find((a) => a.id === route.id) ?? filtered[0];
   const active: Section = route.section === "assets" && route.type === "account" ? "accounts" : route.section === "assets" && route.type === "document" ? "docs" : route.section;
   const dot = assets.some((a) => remindDays(a) <= 7);
 
+  const cardAlert = useMemo(() => {
+    const r = computeCardReserves(assets, today, settings.display, { windowDays: 30, includeManual: true });
+    return r.cardsNeedingTopUp > 0 || r.cardsAtRisk > 0;
+  }, [assets, today, settings.display]);
+
+  const costsTab: CostsTab = route.id === "cards" ? "cards" : "overview";
+
   return (
     <div className="flex h-full max-md:pb-14">
-      <Rail active={active} dark={dark} onNav={nav} onTheme={onTheme} dot={dot} user={me?.username} onLogout={demo ? undefined : onLogout} />
+      <Rail
+        active={active}
+        dark={dark}
+        onNav={nav}
+        onTheme={onTheme}
+        onSearch={() => setCmdOpen(true)}
+        dot={dot}
+        costDot={cardAlert}
+        user={me?.username}
+        onLogout={demo ? undefined : onLogout}
+      />
       {loading ? <main className="grid flex-1 place-items-center text-subtle">加载中…</main> : <>
-        {route.section === "overview" && <Overview onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} onAdd={() => setForm({})} onNav={go} />}
+        {route.section === "overview" && (
+          <Overview
+            onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)}
+            onAdd={() => setForm({})}
+            onNav={go}
+            onOpenSearch={() => setCmdOpen(true)}
+          />
+        )}
         {route.section === "assets" && (
           <>
             <AssetList className={clsx(route.id && "max-lg:hidden")} selected={asset?.id} filter={route.type} onSelect={select} onFilter={(t) => go(`/assets${t === "all" ? "" : `?type=${t}`}`)} onAdd={() => setForm({ type: route.type === "all" || route.type === "starred" ? undefined : route.type })} />
@@ -98,13 +135,29 @@ function Shell({ dark, onTheme, onLogout }: { dark: boolean; onTheme: () => void
         )}
         {route.section === "servers" && <Servers onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} />}
         {route.section === "quota" && <QuotaPage onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} onNav={go} />}
-        {route.section === "costs" && <Costs onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)} />}
+        {route.section === "costs" && (
+          <Costs
+            tab={costsTab}
+            onTab={(t) => go(t === "cards" ? "/costs/cards" : "/costs")}
+            onSelect={(id) => go(`/assets/${encodeURIComponent(id)}`)}
+            onAddCard={() => setForm({ type: "payment" })}
+          />
+        )}
         {route.section === "settings" && <Settings tab={route.id} onTab={(t) => go(`/settings/${t}`)} />}
       </>}
       {form && (
         <AssetForm asset={form.id ? assets.find((a) => a.id === form.id) : undefined} initialType={form.type} onClose={() => setForm(null)}
           onSaved={(id) => { if (id) go(`/assets/${encodeURIComponent(id)}`); else if (form.id) go("/assets"); }} />
       )}
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        onNav={go}
+        onSelectAsset={(id) => go(`/assets/${encodeURIComponent(id)}`)}
+        onAddAsset={() => setForm({})}
+        dark={dark}
+        onTheme={onTheme}
+      />
       {stepUp && <StepUpDialog onDone={(ok) => { stepUp(ok); setStepUp(null); }} />}
     </div>
   );

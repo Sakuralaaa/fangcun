@@ -4,25 +4,25 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { AssetType } from "../data/types";
 import type { Urgency } from "../lib/fmt";
 
-export const typeMeta: Record<AssetType, { label: string; icon: typeof Server; text: string; bar: string }> = {
-  server: { label: "服务器", icon: Server, text: "text-t-server", bar: "bg-t-server" },
-  domain: { label: "域名", icon: Globe, text: "text-t-domain", bar: "bg-t-domain" },
-  cert: { label: "证书", icon: ShieldCheck, text: "text-t-cert", bar: "bg-t-cert" },
-  subscription: { label: "订阅", icon: Sparkles, text: "text-t-sub", bar: "bg-t-sub" },
-  mail: { label: "邮箱", icon: Mail, text: "text-t-mail", bar: "bg-t-mail" },
-  phone: { label: "号码", icon: Smartphone, text: "text-t-phone", bar: "bg-t-phone" },
-  payment: { label: "支付", icon: CreditCard, text: "text-t-payment", bar: "bg-t-payment" },
-  account: { label: "账号", icon: KeyRound, text: "text-t-account", bar: "bg-t-account" },
-  document: { label: "文档", icon: FileText, text: "text-t-document", bar: "bg-t-document" },
+export const typeMeta: Record<AssetType, { label: string; icon: typeof Server; text: string; bar: string; soft: string }> = {
+  server: { label: "服务器", icon: Server, text: "text-t-server", bar: "bg-t-server", soft: "bg-t-server-soft" },
+  domain: { label: "域名", icon: Globe, text: "text-t-domain", bar: "bg-t-domain", soft: "bg-t-domain-soft" },
+  cert: { label: "证书", icon: ShieldCheck, text: "text-t-cert", bar: "bg-t-cert", soft: "bg-t-cert-soft" },
+  subscription: { label: "订阅", icon: Sparkles, text: "text-t-sub", bar: "bg-t-sub", soft: "bg-t-sub-soft" },
+  mail: { label: "邮箱", icon: Mail, text: "text-t-mail", bar: "bg-t-mail", soft: "bg-t-mail-soft" },
+  phone: { label: "号码", icon: Smartphone, text: "text-t-phone", bar: "bg-t-phone", soft: "bg-t-phone-soft" },
+  payment: { label: "支付", icon: CreditCard, text: "text-t-payment", bar: "bg-t-payment", soft: "bg-t-payment-soft" },
+  account: { label: "账号", icon: KeyRound, text: "text-t-account", bar: "bg-t-account", soft: "bg-t-account-soft" },
+  document: { label: "文档", icon: FileText, text: "text-t-document", bar: "bg-t-document", soft: "bg-t-document-soft" },
 };
 
-export function TypeIcon({ type, size = "md" }: { type: AssetType; size?: "sm" | "md" | "lg" }) {
+export function TypeIcon({ type, size = "md", tinted }: { type: AssetType; size?: "sm" | "md" | "lg"; tinted?: boolean }) {
   const m = typeMeta[type] ?? typeMeta.document;
   const Icon = m.icon;
-  const box = { sm: "size-7 rounded-[7px]", md: "size-9 rounded-[10px]", lg: "size-14 rounded-[14px]" }[size];
-  const ic = { sm: 14, md: 17, lg: 26 }[size];
+  const box = { sm: "size-7 rounded-[8px]", md: "size-9 rounded-[10px]", lg: "size-13 rounded-[14px]" }[size];
+  const ic = { sm: 14, md: 17, lg: 24 }[size];
   return (
-    <span className={clsx("grid shrink-0 place-items-center bg-field", box, m.text)}>
+    <span className={clsx("grid shrink-0 place-items-center", tinted ? m.soft : "bg-field", box, m.text)}>
       <Icon size={ic} strokeWidth={1.9} />
     </span>
   );
@@ -31,28 +31,41 @@ export function TypeIcon({ type, size = "md" }: { type: AssetType; size?: "sm" |
 export const urgencyText: Record<Urgency, string> = {
   crit: "text-crit", warn: "text-warn", ok: "text-muted", none: "text-subtle",
 };
-const urgencyPill: Record<Urgency, string> = {
-  crit: "bg-crit-soft text-crit", warn: "bg-warn-soft text-warn", ok: "bg-field text-muted", none: "bg-field text-muted",
+const pillTone: Record<Urgency | "good" | "spark", string> = {
+  crit: "bg-crit-soft text-crit",
+  warn: "bg-warn-soft text-warn",
+  ok: "bg-field text-muted",
+  none: "bg-field text-muted",
+  good: "bg-ok-soft text-ok",
+  spark: "bg-spark-soft text-spark",
 };
-export function Pill({ tone, children, dot }: { tone: Urgency; children: ReactNode; dot?: boolean }) {
+export function Pill({ tone, children, dot, className }: { tone: Urgency | "good" | "spark"; children: ReactNode; dot?: boolean; className?: string }) {
   return (
-    <span className={clsx("inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold whitespace-nowrap", urgencyPill[tone])}>
+    <span className={clsx("inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold whitespace-nowrap", pillTone[tone], className)}>
       {dot && <span className="size-1.5 rounded-full bg-current" />}
       {children}
     </span>
   );
 }
 
-type BtnProps = { children?: ReactNode; variant?: "default" | "primary" | "ghost" | "danger"; icon?: ReactNode; className?: string; onClick?: () => void; disabled?: boolean; type?: "button" | "submit"; title?: string };
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <kbd className={clsx("inline-flex h-5 items-center rounded-[5px] border border-line bg-panel px-1.5 font-sans text-[10.5px] font-medium text-subtle shadow-[0_1px_0_var(--color-line)]", className)}>
+      {children}
+    </kbd>
+  );
+}
+
+type BtnProps = { children?: ReactNode; variant?: "default" | "primary" | "ghost" | "danger"; icon?: ReactNode; className?: string; onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void; disabled?: boolean; type?: "button" | "submit"; title?: string };
 export function Button({ children, variant = "default", icon, className, onClick, disabled, type = "button", title }: BtnProps) {
   return (
     <button type={type} onClick={onClick} disabled={disabled} title={title}
       className={clsx(
-        "inline-flex h-8 items-center gap-1.5 rounded-sm px-3 text-[13px] font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        variant === "primary" && "bg-accent text-on-accent hover:brightness-110",
-        variant === "default" && "border border-line bg-panel text-ink hover:bg-field",
+        "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-sm px-3 text-[13px] font-medium whitespace-nowrap transition-[background-color,border-color,color,transform,filter] duration-150 active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink/35 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
+        variant === "primary" && "bg-accent text-on-accent shadow-[0_1px_2px_rgb(0_0_0/0.12)] hover:brightness-110",
+        variant === "default" && "border border-line bg-panel text-ink shadow-[0_1px_2px_rgb(0_0_0/0.03)] hover:bg-field",
         variant === "ghost" && "text-muted hover:bg-field hover:text-ink",
-        variant === "danger" && "border border-line bg-panel text-crit hover:bg-crit-soft",
+        variant === "danger" && "border border-line bg-panel text-crit hover:border-crit/30 hover:bg-crit-soft",
         className,
       )}
     >
@@ -62,13 +75,54 @@ export function Button({ children, variant = "default", icon, className, onClick
   );
 }
 
+export function SegmentedControl<T extends string | number>({
+  value,
+  onChange,
+  options,
+  size = "md",
+  className,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: ReactNode; badge?: ReactNode }[];
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  return (
+    <div role="tablist" className={clsx("inline-flex items-center gap-0.5 rounded-[10px] border border-line bg-field/85 p-0.5", className)}>
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={String(opt.value)}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(opt.value)}
+            className={clsx(
+              "inline-flex cursor-pointer items-center gap-1.5 rounded-[8px] whitespace-nowrap transition-[background-color,color,box-shadow] duration-150",
+              size === "sm" ? "h-7 px-2.5 text-xs" : "h-8 px-3 text-[13px]",
+              active
+                ? "bg-panel font-semibold text-ink shadow-[0_1px_3px_rgb(0_0_0/0.07),0_0_0_1px_var(--color-line)]"
+                : "text-muted hover:text-ink",
+            )}
+          >
+            <span>{opt.label}</span>
+            {opt.badge}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * A card. The body is a size container (`@container`), so rows inside lay out by the card's own width, not the window's.
  * The header keeps the title whole: when title + extra do not fit on one line, the extra wraps under it.
  */
 export function Card({ title, extra, children, className, flush, scroll, fill }: { title?: ReactNode; extra?: ReactNode; children: ReactNode; className?: string; flush?: boolean; scroll?: boolean; fill?: boolean }) {
   return (
-    <section className={clsx("@container flex min-h-0 flex-col overflow-hidden rounded-md border border-line bg-panel", className)}>
+    <section className={clsx("@container surface-card flex min-h-0 flex-col overflow-hidden", className)}>
       {title && (
         <header className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
           <h3 className="max-w-full min-w-0 shrink-0 truncate text-[13.5px] font-semibold whitespace-nowrap">{title}</h3>
@@ -81,7 +135,7 @@ export function Card({ title, extra, children, className, flush, scroll, fill }:
 }
 
 export function Tag({ children }: { children: ReactNode }) {
-  return <span className="inline-flex h-6 items-center rounded-full border border-line px-2.5 text-xs text-muted">{children}</span>;
+  return <span className="inline-flex h-6 items-center rounded-full border border-line bg-bg px-2.5 text-xs text-muted">{children}</span>;
 }
 
 export function KomariBadge({ className }: { className?: string }) {
@@ -108,25 +162,25 @@ export function Modal({ title, onClose, children, footer, width = 520 }: { title
     return () => removeEventListener("keydown", on);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" className="flex max-h-[calc(100vh-48px)] w-full flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-xl" style={{ maxWidth: width }}>
+    <div className="fc-animate-fade fixed inset-0 z-50 grid place-items-center bg-black/35 p-4 backdrop-blur-[2px] sm:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" className="fc-animate-pop flex max-h-[calc(100vh-32px)] w-full flex-col overflow-hidden rounded-lg border border-line bg-panel sm:max-h-[calc(100vh-48px)]" style={{ maxWidth: width, boxShadow: "var(--shadow-float)" }}>
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-line px-5">
           <h2 className="text-[15px] font-semibold">{title}</h2>
-          <button onClick={onClose} className="grid size-7 place-items-center rounded-[7px] text-subtle hover:bg-field hover:text-ink"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="关闭" className="grid size-7 cursor-pointer place-items-center rounded-[7px] text-subtle transition-colors hover:bg-field hover:text-ink"><X size={16} /></button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</footer>}
+        {footer && <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-line bg-bg/50 px-5 py-3">{footer}</footer>}
       </div>
     </div>
   );
 }
 
-const inputCls = "h-9 w-full rounded-sm border border-line bg-field px-3 text-[13px] outline-none placeholder:text-subtle focus:border-ink/40";
+const inputCls = "h-9 w-full rounded-sm border border-line bg-field px-3 text-[13px] outline-none transition-[border-color,background-color] placeholder:text-subtle focus:border-ink/45 focus:bg-panel";
 
 export function Field({ label, hint, children, className }: { label: string; hint?: string; children: ReactNode; className?: string }) {
   return (
     <label className={clsx("flex min-w-0 flex-col gap-1.5", className)}>
-      <span className="text-xs text-muted">{label}{hint && <span className="ml-1.5 text-subtle">{hint}</span>}</span>
+      <span className="text-xs font-medium text-muted">{label}{hint && <span className="ml-1.5 font-normal text-subtle">{hint}</span>}</span>
       {children}
     </label>
   );
@@ -147,13 +201,13 @@ export function Select<T extends string>({ value, onChange, options, className }
 
 export function TextArea({ value, onChange, rows = 3, placeholder }: { value: string | undefined; onChange: (v: string) => void; rows?: number; placeholder?: string }) {
   return <textarea value={value ?? ""} rows={rows} placeholder={placeholder} onChange={(e) => onChange(e.target.value)}
-    className="w-full resize-y rounded-sm border border-line bg-field px-3 py-2 text-[13px] leading-relaxed outline-none placeholder:text-subtle focus:border-ink/40" />;
+    className="w-full resize-y rounded-sm border border-line bg-field px-3 py-2 text-[13px] leading-relaxed outline-none transition-[border-color,background-color] placeholder:text-subtle focus:border-ink/45 focus:bg-panel" />;
 }
 
 export function Toggle({ on, onChange, disabled }: { on: boolean; onChange?: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button type="button" disabled={disabled} onClick={() => onChange?.(!on)} aria-pressed={on}
-      className={clsx("relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50", on ? "bg-accent" : "bg-line")}>
+      className={clsx("relative h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50", on ? "bg-accent" : "bg-line")}>
       <span className={clsx("absolute top-0.5 size-4 rounded-full bg-white shadow transition-all", on ? "left-[18px]" : "left-0.5")} />
     </button>
   );
@@ -212,7 +266,7 @@ export function StarButton({ on, onToggle, name, size = 15, reveal, className }:
   return (
     <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(); }} onKeyDown={(e) => e.stopPropagation()}
       aria-pressed={on} aria-label={on ? `取消关注「${name}」` : `关注「${name}」`} title={on ? "取消关注" : "关注"}
-      className={clsx("grid shrink-0 place-items-center rounded-[6px] transition-[color,opacity] hover:bg-field focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ink/30",
+      className={clsx("grid shrink-0 cursor-pointer place-items-center rounded-[6px] transition-[color,opacity,background-color] hover:bg-field focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ink/30",
         on ? "text-ink" : "text-muted hover:text-ink",
         reveal && !on && "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
         className ?? "size-7")}>
@@ -220,8 +274,6 @@ export function StarButton({ on, onToggle, name, size = 15, reveal, className }:
     </button>
   );
 }
-
-/** `fill` (above): the body is a flex column that takes the card's remaining height, so a textarea inside can grow with it. */
 
 /** Read-only 关注 / 置顶 mark next to a name. */
 export function FocusMark({ starred, pinned, size = 12, className }: { starred?: boolean; pinned?: boolean; size?: number; className?: string }) {
@@ -258,14 +310,14 @@ export function MoreMenu({ items, label = "更多操作" }: { items: { label: st
   return (
     <div ref={box} className="relative">
       <button ref={btn} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={label} title={label}
-        className="grid size-8 place-items-center rounded-sm border border-line bg-panel text-muted hover:bg-field hover:text-ink">
+        className="grid size-8 cursor-pointer place-items-center rounded-sm border border-line bg-panel text-muted transition-colors hover:bg-field hover:text-ink">
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <div role="menu" onKeyDown={move} className="absolute right-0 z-40 mt-1 min-w-[148px] rounded-sm border border-line bg-panel py-1 shadow-lg">
+        <div role="menu" onKeyDown={move} className="fc-animate-pop absolute right-0 z-40 mt-1.5 min-w-[152px] rounded-sm border border-line bg-panel py-1" style={{ boxShadow: "var(--shadow-float)" }}>
           {items.map((it) => (
             <button key={it.label} type="button" role="menuitem" onClick={() => { setOpen(false); it.onSelect(); }}
-              className={clsx("flex h-8 w-full items-center gap-2 px-3 text-left text-[13px] whitespace-nowrap outline-none hover:bg-field focus:bg-field", it.danger ? "text-crit" : "text-ink")}>
+              className={clsx("flex h-8 w-full cursor-pointer items-center gap-2 px-3 text-left text-[13px] whitespace-nowrap outline-none hover:bg-field focus:bg-field", it.danger ? "text-crit" : "text-ink")}>
               {it.icon}{it.label}
             </button>
           ))}

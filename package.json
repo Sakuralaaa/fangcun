@@ -1,6 +1,6 @@
 {
   "name": "fangcun",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "description": "方寸 Fangcun — 个人资产台账：服务器、域名、证书、订阅、邮箱、号码、支付卡、账号、文档的到期与费用管理",
   "license": "MIT",

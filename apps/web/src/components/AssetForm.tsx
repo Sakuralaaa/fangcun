@@ -1,8 +1,9 @@
 import { ASSET_TYPES, CARD_NETWORKS, CARD_STATUS, CARD_STATUS_LABEL, CYCLE_LABEL, CYCLES, TYPE_LABEL, type CardStatus, type Cycle, type Workspace } from "@fangcun/core";
 import clsx from "clsx";
-import { Plus, Trash2, X } from "lucide-react";
+import { CreditCard, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Asset, AssetType } from "../data/types";
+import { getToday } from "../lib/fmt";
 import { useData } from "../lib/store";
 import { Button, Field, Modal, Select, TextArea, TextInput, Toggle, TypeIcon, typeMeta } from "./ui";
 
@@ -57,11 +58,11 @@ export function AssetForm({ asset, initialType, onClose, onSaved }: { asset?: As
         <Button variant="primary" onClick={save} disabled={busy || !d.name.trim()}>{isNew ? "添加" : "保存"}</Button>
       </>}>
       {isNew && (
-        <div className="mb-4 grid grid-cols-9 gap-1.5">
+        <div className="mb-4 grid grid-cols-3 gap-1.5 sm:grid-cols-5 md:grid-cols-9">
           {ASSET_TYPES.map((x) => (
             <button key={x} onClick={() => setD((cur) => ({ ...blank(x), name: cur.name, tags: cur.tags, note: cur.note }))}
-              className={clsx("flex flex-col items-center gap-1 rounded-sm border py-2 text-[11.5px]", t === x ? "border-ink bg-sel font-semibold" : "border-line text-muted hover:bg-field")}>
-              <TypeIcon type={x} size="sm" />{typeMeta[x].label}
+              className={clsx("flex cursor-pointer flex-col items-center gap-1 rounded-sm border py-2 text-[11.5px] transition-colors", t === x ? "border-ink bg-sel font-semibold" : "border-line text-muted hover:bg-field")}>
+              <TypeIcon type={x} size="sm" tinted />{typeMeta[x].label}
             </button>
           ))}
         </div>
@@ -123,7 +124,7 @@ export function AssetForm({ asset, initialType, onClose, onSaved }: { asset?: As
           <Field label="登录账号"><Select value={d.accountId ?? ""} onChange={(v) => set("accountId", v || null)} options={[["", "不关联"], ...accounts.map((a) => [a.id, `${a.name}${a.account?.username ? ` · ${a.account.username}` : ""}`] as [string, string])]} /></Field>
         )}
         {t !== "account" && <div />}
-        <div className="col-span-2"><RelatedPicker value={d.related ?? []} self={asset?.id} onChange={(v) => set("related", v)} hint={t === "payment" ? "关联用这张卡付款的订阅、服务器…" : "关联的域名、证书、付款卡…"} /></div>
+        <div className="col-span-2"><RelatedPicker value={d.related ?? []} self={asset?.id} type={t} onChange={(v) => set("related", v)} hint={t === "payment" ? "关联用这张卡付款的订阅、服务器…" : "关联的付款卡、域名、证书…"} /></div>
         <Field label="备注" className="col-span-2"><TextArea value={d.note} onChange={(v) => set("note", v)} /></Field>
       </Section>
     </Modal>
@@ -149,6 +150,7 @@ type SetFn = <K extends keyof Draft>(k: K, v: Draft[K]) => void;
 function PaymentFields({ d, set }: { d: Draft; set: SetFn }) {
   const p = d.payment ?? { issuer: "", last4: "", status: "active" as CardStatus };
   const up = (patch: Partial<typeof p>) => set("payment", { ...p, ...patch });
+  const balCur = p.balanceCurrency || d.currency || "USD";
   return (
     <Section title="卡片">
       <Field label="发卡平台"><TextInput value={p.issuer} onChange={(v) => { up({ issuer: v }); set("provider", v); }} placeholder="如 某数字银行 / U 卡平台" /></Field>
@@ -157,6 +159,34 @@ function PaymentFields({ d, set }: { d: Draft; set: SetFn }) {
       <Field label="卡片有效期" hint="作为到期日提醒"><TextInput type="month" value={p.cardExpiry} onChange={(v) => up({ cardExpiry: v || undefined })} /></Field>
       <Field label="账单地区"><TextInput value={p.billingRegion} onChange={(v) => up({ billingRegion: v })} placeholder="美国 / 香港…" /></Field>
       <Field label="状态"><Select value={p.status} onChange={(v) => up({ status: v })} options={CARD_STATUS.map((s) => [s, CARD_STATUS_LABEL[s]] as [CardStatus, string])} /></Field>
+      <Field label="当前卡内余额" hint="可选，用于自动计算充值缺口">
+        <TextInput
+          value={p.balance != null ? String(p.balance) : ""}
+          onChange={(v) => {
+            const trimmed = v.trim();
+            up({
+              balance: trimmed === "" ? null : Number(trimmed),
+              balanceCurrency: balCur,
+              balanceUpdatedAt: trimmed === "" ? null : getToday(),
+            });
+          }}
+          inputMode="decimal"
+          placeholder="如 150"
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label="余额币种">
+          <Select value={balCur} onChange={(v) => up({ balanceCurrency: v })} options={[...new Set([...CURRENCIES, balCur])].map((c) => [c, c] as [string, string])} />
+        </Field>
+        <Field label="最低安全底线" hint="额外预留">
+          <TextInput
+            value={p.reserveBuffer != null ? String(p.reserveBuffer) : ""}
+            onChange={(v) => up({ reserveBuffer: v.trim() === "" ? null : Number(v.trim()) })}
+            inputMode="decimal"
+            placeholder="如 50"
+          />
+        </Field>
+      </div>
       <Field label="开卡费 / 充值手续费" className="col-span-2"><TextInput value={p.fees} onChange={(v) => up({ fees: v })} placeholder="开卡 $10 · USDT 充值 1.5%" /></Field>
     </Section>
   );
@@ -233,27 +263,51 @@ function DetailsEditor({ value, onChange }: { value: { label: string; value: str
   );
 }
 
-function RelatedPicker({ value, onChange, self, hint }: { value: string[]; onChange: (v: string[]) => void; self?: string; hint: string }) {
+function RelatedPicker({ value, onChange, self, type, hint }: { value: string[]; onChange: (v: string[]) => void; self?: string; type: AssetType; hint: string }) {
   const { assets } = useData();
   const [q, setQ] = useState("");
   const chosen = value.map((id) => assets.find((a) => a.id === id)).filter(Boolean) as Asset[];
-  const options = useMemo(() => assets.filter((a) => a.id !== self && !value.includes(a.id) && (!q || `${a.name} ${a.subtitle ?? ""}`.toLowerCase().includes(q.toLowerCase()))).slice(0, 8), [assets, self, value, q]);
+  const options = useMemo(() => assets.filter((a) => a.id !== self && !value.includes(a.id) && (!q || `${a.name} ${a.subtitle ?? ""} ${a.payment?.last4 ?? ""}`.toLowerCase().includes(q.toLowerCase()))).slice(0, 8), [assets, self, value, q]);
+  const quickCards = useMemo(
+    () =>
+      type === "payment" || type === "account" || type === "document"
+        ? []
+        : assets.filter((a) => a.type === "payment" && a.payment?.status !== "closed" && a.id !== self && !value.includes(a.id)),
+    [assets, self, type, value],
+  );
   return (
     <Field label="关联" hint={hint}>
       <div className="flex flex-wrap gap-1.5">
         {chosen.map((a) => (
-          <span key={a.id} className="inline-flex h-7 items-center gap-1.5 rounded-full border border-line pr-1.5 pl-2.5 text-xs">
-            {TYPE_LABEL[a.type]} · {a.name}
-            <button onClick={() => onChange(value.filter((x) => x !== a.id))} className="text-subtle hover:text-crit"><X size={12} /></button>
+          <span key={a.id} className="inline-flex h-7 items-center gap-1.5 rounded-full border border-line bg-bg pr-1.5 pl-2.5 text-xs">
+            {TYPE_LABEL[a.type]} · {a.name}{a.payment?.last4 ? ` (${a.payment.last4})` : ""}
+            <button type="button" onClick={() => onChange(value.filter((x) => x !== a.id))} className="cursor-pointer text-subtle hover:text-crit"><X size={12} /></button>
           </span>
         ))}
       </div>
+      {quickCards.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11.5px] text-subtle">快捷绑定付款卡：</span>
+          {quickCards.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onChange([...value, c.id])}
+              className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-full border border-line bg-t-payment-soft/50 px-2 text-xs text-t-payment transition-colors hover:bg-t-payment-soft"
+            >
+              <CreditCard size={11} />
+              <span>{c.name}</span>
+              <span className="font-mono opacity-80">{c.payment?.last4}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <TextInput value={q} onChange={setQ} placeholder="搜索要关联的资产…" />
       {q && (
-        <div className="overflow-hidden rounded-sm border border-line">
+        <div className="overflow-hidden rounded-sm border border-line bg-panel">
           {options.map((a) => (
-            <button key={a.id} onClick={() => { onChange([...value, a.id]); setQ(""); }} className="flex h-9 w-full items-center gap-2 border-b border-line px-3 text-left text-[13px] last:border-0 hover:bg-field">
-              <TypeIcon type={a.type} size="sm" /><span className="truncate">{a.name}</span><span className="ml-auto text-xs text-subtle">{TYPE_LABEL[a.type]}</span>
+            <button type="button" key={a.id} onClick={() => { onChange([...value, a.id]); setQ(""); }} className="flex h-9 w-full cursor-pointer items-center gap-2 border-b border-line px-3 text-left text-[13px] last:border-0 hover:bg-field">
+              <TypeIcon type={a.type} size="sm" tinted /><span className="truncate">{a.name}</span><span className="ml-auto text-xs text-subtle">{TYPE_LABEL[a.type]}</span>
             </button>
           ))}
           {!options.length && <div className="px-3 py-2 text-xs text-subtle">没有匹配</div>}

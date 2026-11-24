@@ -118,11 +118,11 @@ export const demoAssets: Asset[] = [
     note: "每 90 天至少收一条短信保号。" }),
   mk({ id: "card-wise", starred: true, type: "payment", name: "美元虚拟卡", subtitle: "Visa ···· 4242", provider: "示例数字银行",
     price: 0, cycle: "year", purchasedAt: "2025-03-02", tags: ["支付"], related: ["hk-api-02", "ai-code", "ai-chat"],
-    payment: { issuer: "示例数字银行", network: "Visa", last4: "4242", cardExpiry: "2028-09", billingRegion: "美国", fees: "开卡免费 · 充值 0.5%", status: "active" },
+    payment: { issuer: "示例数字银行", network: "Visa", last4: "4242", cardExpiry: "2028-09", billingRegion: "美国", fees: "开卡免费 · 充值 0.5%", status: "active", balance: 85, balanceCurrency: "USD", balanceUpdatedAt: "2026-11-12", reserveBuffer: 20 },
     expiresAt: "2028-09-30" }),
   mk({ id: "card-onekey", type: "payment", name: "U 卡", subtitle: "Mastercard ···· 8817", provider: "示例 U 卡平台",
     price: 1, cycle: "month", purchasedAt: "2026-01-12", tags: ["支付", "号池"], related: ["gpt-team"],
-    payment: { issuer: "示例 U 卡平台", network: "Mastercard", last4: "8817", cardExpiry: "2026-12", billingRegion: "香港", fees: "开卡 $10 · USDT 充值 1.5%", status: "active" },
+    payment: { issuer: "示例 U 卡平台", network: "Mastercard", last4: "8817", cardExpiry: "2026-12", billingRegion: "香港", fees: "开卡 $10 · USDT 充值 1.5%", status: "active", balance: 260, balanceCurrency: "USD", balanceUpdatedAt: "2026-11-14", reserveBuffer: 50 },
     expiresAt: "2026-12-31", note: "只用来付团队订阅；余额低于 $50 记得充值。" }),
   // Sparse records, like real libraries: one or two fields, no note, no renewals, no purchase date, expiry in another year.
   mk({ id: "lab-xyz", type: "domain", name: "lab-sample.xyz", provider: "Cloudflare", price: 10.44, cycle: "year", expiresAt: "2027-08-06",
@@ -134,7 +134,18 @@ export const demoAssets: Asset[] = [
   mk({ id: "notes-app", type: "subscription", name: "笔记应用", price: 96, currency: "CNY", cycle: "year", expiresAt: "2027-01-10", autoRenew: true }),
   mk({ id: "lab-cert", type: "cert", name: "*.lab-sample.xyz", provider: "Let's Encrypt", cycle: "quarter", expiresAt: "2027-02-02", autoRenew: true }),
   mk({ id: "lab-mail", type: "mail", name: "hi@lab-sample.xyz", cycle: "year" }),
-  mk({ id: "doc-transfer", type: "document", name: "域名转移授权", cycle: "once" }),
+  mk({
+    id: "doc-transfer",
+    type: "document",
+    name: "域名转移授权",
+    subtitle: "starbridge.example 相关文件",
+    cycle: "once",
+    related: ["starbridge"],
+    attachments: [
+      { name: "域名转移授权说明.md", size: 428, sha256: "demo-md", addedAt: "2026-11-10T08:00:00.000Z", mime: "text/markdown" },
+      { name: "域名授权确认函.pdf", size: 252_928, sha256: "demo-pdf", addedAt: "2026-11-12T08:00:00.000Z", mime: "application/pdf" },
+    ],
+  }),
 ];
 
 const st = (s: Partial<NodeStatus> & Pick<NodeStatus, "uuid">): NodeStatus => ({

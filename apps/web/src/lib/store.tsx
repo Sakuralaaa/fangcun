@@ -256,9 +256,13 @@ export function DataProvider({ me: initialMe, children }: { me: Me | null; child
   return (
     <C.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed right-5 bottom-5 z-[60] flex flex-col items-end gap-2">
+      <div className="pointer-events-none fixed right-5 bottom-5 z-[60] flex flex-col items-end gap-2 max-md:bottom-18 max-md:right-3 max-md:left-3">
         {toasts.map((t) => (
-          <div key={t.id} className={`pointer-events-auto max-w-[420px] rounded-sm px-3.5 py-2.5 text-[13px] shadow-lg ${t.tone === "err" ? "bg-crit text-white" : "bg-ink text-bg"}`}>{t.msg}</div>
+          <button key={t.id} type="button" onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}
+            className={`fc-animate-toast pointer-events-auto flex max-w-[420px] cursor-pointer items-center gap-2 rounded-md px-3.5 py-2.5 text-left text-[13px] font-medium shadow-lg transition-opacity hover:opacity-90 ${t.tone === "err" ? "bg-crit text-white" : "bg-ink text-bg"}`}>
+            <span className={`size-1.5 shrink-0 rounded-full ${t.tone === "err" ? "bg-white" : "bg-ok"}`} />
+            <span>{t.msg}</span>
+          </button>
         ))}
       </div>
     </C.Provider>

@@ -1,12 +1,14 @@
-import { addCycle, CARD_STATUS_LABEL, formatKomariValue, monthsHeld, nextExpiry, paidSoFar, yearlyCost } from "@fangcun/core";
+import { addCycle, CARD_STATUS_LABEL, findLinkedCards, formatKomariValue, monthsHeld, nextExpiry, paidSoFar, yearlyCost } from "@fangcun/core";
 import clsx from "clsx";
-import { Check, ChevronLeft, Download, ExternalLink, FileUp, Globe, Lock, Pencil, Pin, PinOff, Trash2, Undo2 } from "lucide-react";
+import { Check, ChevronLeft, CreditCard, Download, ExternalLink, Eye, FileUp, Globe, Lock, Pencil, Pin, PinOff, Trash2, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../data/types";
 import { api } from "../lib/api";
 import { cycleLabel, dateLabel, daysUntil, dueLabel, perCycle, remindDays, renewOpen, renewOpensAt, getToday, money, urgency, ymd } from "../lib/fmt";
 import { useData } from "../lib/store";
 import { AtollDomainCard, AtollImpact, AtollProjectsCard } from "./Atoll";
+import { AttachmentBadge, AttachmentPreviewModal, attachmentUrls, canPreviewAttachment, formatFileSize } from "./AttachmentPreview";
+import { CardReserveDetailCard } from "./CardReserves";
 import { CloudflareDomainCard, CloudflareServerCard } from "./Cloudflare";
 import { NodeStatusCard } from "./NodeStatus";
 import { QuotaCard } from "./Quota";
@@ -20,10 +22,13 @@ function detailRows(a: Asset): { label: string; value: string; mono?: boolean; s
   const rows: { label: string; value: string; mono?: boolean; synced?: boolean }[] = [];
   if (a.payment) {
     const p = a.payment;
+    const balCur = p.balanceCurrency || a.currency || "USD";
     rows.push(
       { label: "发卡平台", value: p.issuer }, { label: "卡组织", value: p.network ?? "—" },
       { label: "卡号", value: `···· ${p.last4}`, mono: true }, { label: "有效期", value: p.cardExpiry ? p.cardExpiry.replace("-", "/") : "—", mono: true },
       { label: "状态", value: CARD_STATUS_LABEL[p.status] }, { label: "账单地区", value: p.billingRegion ?? "—" },
+      ...(p.balance != null ? [{ label: "当前余额", value: `${money(p.balance, balCur)}${p.balanceUpdatedAt ? `（${ymd(p.balanceUpdatedAt)}）` : ""}` }] : []),
+      ...(p.reserveBuffer != null && p.reserveBuffer > 0 ? [{ label: "最低安全底线", value: money(p.reserveBuffer, balCur) }] : []),
       ...(p.fees ? [{ label: "手续费", value: p.fees }] : []),
     );
   }
@@ -49,6 +54,7 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
   const months = monthsHeld(a.purchasedAt, today);
   const ov = a.komari?.overridden ?? {};
   const account = a.type === "account" ? a : assets.find((x) => x.id === a.accountId && x.type === "account");
+  const payCards = findLinkedCards(a, assets);
   const related = a.related.map((id) => assets.find((x) => x.id === id)).filter(Boolean) as Asset[];
   const backlinks = assets.filter((x) => x.id !== a.id && !a.related.includes(x.id) && (x.related.includes(a.id) || x.accountId === a.id));
   const links = [...related, ...backlinks];
@@ -64,16 +70,31 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
     <main className={clsx("flex min-w-0 flex-1 flex-col", className)}>
       <div className="@container flex-1 overflow-y-auto">
         <div className={clsx("page flex flex-col", narrow ? "@container max-w-[840px] gap-5" : "gap-4")}>
-          {onBack && <button onClick={onBack} className="-mb-1 flex w-fit items-center gap-1 text-[13px] text-muted hover:text-ink lg:hidden"><ChevronLeft size={16} />资产</button>}
+          {onBack && <button onClick={onBack} className="-mb-1 flex w-fit cursor-pointer items-center gap-1 text-[13px] text-muted hover:text-ink lg:hidden"><ChevronLeft size={16} />资产</button>}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-            <TypeIcon type={a.type} size="lg" />
+            <TypeIcon type={a.type} size="lg" tinted />
             <div className={clsx("min-w-0 flex-1", narrow && (rd <= 30 || a.name.length > 14) ? "basis-[calc(100%-72px)]" : "basis-[220px]")}>
               <div className="flex min-w-0 items-center gap-1.5">
                 <h1 className={clsx("truncate text-[22px] font-bold tracking-tight", a.type === "server" && "font-mono text-[23px]")}>{a.name}</h1>
                 <StarButton on={a.starred} name={a.name} onToggle={() => setFocus(a.id, { starred: !a.starred })} size={17} className="size-8" />
                 {a.pinned && <span className="inline-flex h-[22px] shrink-0 items-center gap-1 rounded-[6px] bg-field px-1.5 text-[11.5px] whitespace-nowrap text-muted"><Pin size={11} strokeWidth={2} />置顶</span>}
               </div>
-              <p className="mt-0.5 truncate text-[13px] text-muted">{[a.subtitle, a.provider].filter(Boolean).join(" · ")}{a.tags.length > 0 && <span className="text-subtle"> · {a.tags.map((t) => `#${t}`).join("  ")}</span>}</p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">
+                <span className="truncate">{[a.subtitle, a.provider].filter(Boolean).join(" · ")}{a.tags.length > 0 && <span className="text-subtle"> · {a.tags.map((t) => `#${t}`).join("  ")}</span>}</span>
+                {payCards.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onSelect(c.id)}
+                    title={`使用「${c.name}」付款，点击查看卡片预留`}
+                    className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-[5px] bg-t-payment-soft px-1.5 text-[11.5px] font-medium text-t-payment hover:brightness-95"
+                  >
+                    <CreditCard size={11} />
+                    <span>{c.name}</span>
+                    <span className="font-mono opacity-80">···· {c.payment?.last4}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
               {rd <= 30 && <AtollImpact asset={a} />}
@@ -106,6 +127,8 @@ export function AssetDetail({ asset: a, onSelect, onEdit, onBack, className }: {
                       foot={a.autoRenew ? "到期自动扣费，留意卡片余额" : a.renewWindowDays ? `到期前 ${a.renewWindowDays} 天可续期` : a.price ? "到期前记得手动续费" : "无需付费"} />}
             </div>
           )}
+
+          {a.type === "payment" && <CardReserveDetailCard card={a} onSelect={onSelect} />}
 
           {a.komari && <NodeStatusCard asset={a} status={stat} />}
           {a.type === "server" && <AtollProjectsCard asset={a} onSelect={onSelect} />}
@@ -226,29 +249,66 @@ function NoteCard({ a, className }: { a: Asset; className?: string }) {
 }
 
 function LinkCard({ title, links, onSelect, className }: { title: string; links: Asset[]; onSelect: (id: string) => void; className?: string }) {
+  const { demo } = useData();
+  const [preview, setPreview] = useState<{ asset: Asset; index: number } | null>(null);
   return (
-    <Card title={title} extra={links.length} flush scroll className={clsx("min-h-0", className)}>
-      {links.length ? links.map((r) => (
-        <button key={r.id} onClick={() => onSelect(r.id)} className="flex h-12 w-full shrink-0 items-center gap-3 border-b border-line px-4 text-left last:border-0 hover:bg-field/60">
-          <TypeIcon type={r.type} size="sm" />
-          <span className="flex-1 truncate text-[13px] font-medium">{r.name}</span>
-          <span className={clsx("shrink-0 text-xs whitespace-nowrap tnum", urgencyText[urgency(r)])}>{dueLabel(r)}</span>
-        </button>
-      )) : <Empty>暂无</Empty>}
-    </Card>
+    <>
+      <Card title={title} extra={links.length} flush scroll className={clsx("min-h-0", className)}>
+        {links.length ? links.map((r) => {
+          const files = r.attachments ?? [];
+          return (
+            <div key={r.id} className="flex min-h-12 w-full shrink-0 items-center gap-2 border-b border-line px-4 transition-colors last:border-0 hover:bg-field/60">
+              <button type="button" onClick={() => onSelect(r.id)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-2 text-left">
+                <TypeIcon type={r.type} size="sm" tinted />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium">{r.name}</span>
+                </span>
+                {r.price > 0 && (
+                  <span className="shrink-0 text-xs text-muted tnum">
+                    {perCycle(r)}{r.autoRenew ? " · 自动" : ""}
+                  </span>
+                )}
+                <span className={clsx("shrink-0 text-xs whitespace-nowrap tnum", urgencyText[urgency(r)])}>{dueLabel(r)}</span>
+              </button>
+              {files.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPreview({ asset: r, index: 0 })}
+                  title={`直接查看「${r.name}」的 ${files.length} 个附件`}
+                  className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[6px] border border-line bg-panel px-2 text-xs font-medium text-ink transition-colors hover:bg-field"
+                >
+                  <Eye size={12} />
+                  <span>{files.length > 1 ? `查看 (${files.length})` : "查看"}</span>
+                </button>
+              )}
+            </div>
+          );
+        }) : <Empty>暂无</Empty>}
+      </Card>
+      {preview && preview.asset.attachments?.length ? (
+        <AttachmentPreviewModal
+          assetId={preview.asset.id}
+          files={preview.asset.attachments}
+          index={preview.index}
+          demo={demo}
+          onIndex={(i) => setPreview((p) => (p ? { ...p, index: i } : null))}
+          onClose={() => setPreview(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
 function Stat({ label, value, foot, override, synced }: { label: string; value: React.ReactNode; foot?: string; synced?: boolean; override?: { text: string; changed?: boolean; onRestore: () => void } | undefined }) {
   return (
-    <div className="rounded-md border border-line bg-panel px-4 pt-3.5 pb-3">
+    <div className="surface-card px-4 pt-3.5 pb-3">
       <div className="flex items-center gap-1.5 text-xs text-muted">{label}{synced && !override && <span className="size-1 rounded-full bg-accent" title="来自 Komari" />}</div>
       <div className="mt-1.5 truncate text-[24px] font-bold tracking-tight whitespace-nowrap tnum @4xl:text-[26px]">{value}</div>
       {override ? (
         <div className="mt-1 flex items-center gap-1.5 text-xs">
           <span className="shrink-0 rounded-[5px] bg-warn-soft px-1.5 py-px font-medium whitespace-nowrap text-warn">已手动修改</span>
           <span className="truncate text-subtle">Komari{override.changed ? " 已变为" : ""}: {override.text}</span>
-          <button onClick={override.onRestore} title="恢复为 Komari 的值" className="ml-auto grid size-5 place-items-center rounded text-subtle hover:bg-field hover:text-ink"><Undo2 size={13} /></button>
+          <button onClick={override.onRestore} title="恢复为 Komari 的值" className="ml-auto grid size-5 cursor-pointer place-items-center rounded text-subtle hover:bg-field hover:text-ink"><Undo2 size={13} /></button>
         </div>
       ) : (
         <div className="mt-1 truncate text-xs text-subtle tnum">{foot}</div>
@@ -292,11 +352,19 @@ function AccountCard({ account, compact, onOpen }: { account: Asset; compact?: b
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard?.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
   return (
     <div className="flex items-center gap-2 rounded-sm bg-field px-3 py-2">
       <span className="w-8 shrink-0 text-xs text-subtle">{label}</span>
       <span className="flex-1 truncate text-[13px]">{value}</span>
-      <button onClick={() => navigator.clipboard?.writeText(value)} className="text-xs text-subtle hover:text-ink">复制</button>
+      <button type="button" onClick={copy} className={clsx("cursor-pointer text-xs transition-colors", copied ? "font-medium text-ok" : "text-subtle hover:text-ink")}>
+        {copied ? "已复制" : "复制"}
+      </button>
     </div>
   );
 }
@@ -330,6 +398,12 @@ function RenewDialog({ a, onClose }: { a: Asset; onClose: () => void }) {
 function Attachments({ a }: { a: Asset }) {
   const { demo, reload, toast } = useData();
   const input = useRef<HTMLInputElement>(null);
+  const [previewIdx, setPreviewIdx] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const files = a.attachments ?? [];
+
+  useEffect(() => { setPreviewIdx(null); }, [a.id]);
+
   const upload = async (f: File) => {
     try {
       await api("POST", `/api/assets/${encodeURIComponent(a.id)}/attachments?name=${encodeURIComponent(f.name)}`, f, { contentType: f.type || "application/octet-stream" });
@@ -342,18 +416,130 @@ function Attachments({ a }: { a: Asset }) {
     await api("DELETE", `/api/assets/${encodeURIComponent(a.id)}/attachments/${encodeURIComponent(name)}`).catch((e) => toast(e.message, "err"));
     await reload();
   };
+  const onDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (demo) return;
+    const dropped = Array.from(e.dataTransfer.files);
+    for (const f of dropped) await upload(f);
+  };
+
   return (
-    <Card title="附件" extra={!demo && <Button variant="ghost" className="h-7 px-2 text-xs" icon={<FileUp size={13} />} onClick={() => input.current?.click()}>上传</Button>} flush>
-      <input ref={input} type="file" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-      {a.attachments?.length ? a.attachments.map((f) => (
-        <div key={f.name} className="flex h-11 items-center gap-3 border-b border-line px-4 text-[13px] last:border-0">
-          <span className="flex-1 truncate">{f.name}</span>
-          <span className="text-xs text-subtle tnum">{(f.size / 1024).toFixed(f.size > 102400 ? 0 : 1)} KB · {f.addedAt.slice(0, 10)}</span>
-          <a href={`/api/assets/${encodeURIComponent(a.id)}/attachments/${encodeURIComponent(f.name)}`} className="text-subtle hover:text-ink" title="下载"><Download size={14} /></a>
-          <button onClick={() => remove(f.name)} className="text-subtle hover:text-crit" title="删除"><Trash2 size={14} /></button>
-        </div>
-      )) : <Empty>还没有附件</Empty>}
-    </Card>
+    <>
+      <div
+        onDragOver={(e) => { if (!demo) { e.preventDefault(); setDragOver(true); } }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        className={clsx("rounded-md transition-shadow", dragOver && "ring-2 ring-accent/40")}
+      >
+        <Card
+          title={
+            <span className="flex items-center gap-2">
+              附件
+              {files.length > 0 && <span className="text-xs font-normal text-subtle tnum">{files.length}</span>}
+            </span>
+          }
+          extra={
+            <div className="flex items-center gap-2">
+              {files.length > 0 && <span className="text-xs text-subtle max-sm:hidden">点击文件名直接查看</span>}
+              {!demo && (
+                <Button variant="ghost" className="h-7 px-2 text-xs" icon={<FileUp size={13} />} onClick={() => input.current?.click()}>
+                  上传
+                </Button>
+              )}
+            </div>
+          }
+          flush
+        >
+          <input ref={input} type="file" hidden onChange={(e) => { if (e.target.files?.[0]) { void upload(e.target.files[0]); e.target.value = ""; } }} />
+          {files.length ? (
+            <div className="divide-y divide-line border-t border-line">
+              {files.map((f, i) => {
+                const urls = attachmentUrls(a.id, f.name);
+                const previewable = canPreviewAttachment(f);
+                return (
+                  <div key={f.name} className="group flex min-h-12 items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-field/50">
+                    <AttachmentBadge file={f} />
+                    <button
+                      type="button"
+                      onClick={() => setPreviewIdx(i)}
+                      title={previewable ? `点击直接查看「${f.name}」` : `打开「${f.name}」`}
+                      className="min-w-0 flex-1 cursor-pointer text-left"
+                    >
+                      <span className="block truncate font-medium group-hover:underline">{f.name}</span>
+                      <span className="block text-[11.5px] text-subtle tnum sm:hidden">
+                        {formatFileSize(f.size)} · {f.addedAt.slice(0, 10)}
+                      </span>
+                    </button>
+                    <span className="shrink-0 text-xs text-subtle tnum max-sm:hidden">
+                      {formatFileSize(f.size)} · {f.addedAt.slice(0, 10)}
+                    </span>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewIdx(i)}
+                        title="直接查看"
+                        aria-label={`查看 ${f.name}`}
+                        className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[6px] border border-line bg-panel px-2 text-xs font-medium text-ink transition-colors hover:bg-field"
+                      >
+                        <Eye size={13} />
+                        <span>查看</span>
+                      </button>
+                      {!demo && previewable && (
+                        <a
+                          href={urls.inline}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="在新标签页打开"
+                          aria-label={`在新标签页打开 ${f.name}`}
+                          className="grid size-7 place-items-center rounded-[6px] text-subtle transition-colors hover:bg-field hover:text-ink"
+                        >
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                      {!demo && (
+                        <a
+                          href={urls.download}
+                          title="下载"
+                          aria-label={`下载 ${f.name}`}
+                          className="grid size-7 place-items-center rounded-[6px] text-subtle transition-colors hover:bg-field hover:text-ink"
+                        >
+                          <Download size={14} />
+                        </a>
+                      )}
+                      {!demo && (
+                        <button
+                          type="button"
+                          onClick={() => remove(f.name)}
+                          title="删除"
+                          aria-label={`删除 ${f.name}`}
+                          className="grid size-7 cursor-pointer place-items-center rounded-[6px] text-subtle transition-colors hover:bg-crit-soft hover:text-crit"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <Empty>{demo ? "还没有附件" : "还没有附件，点右上角「上传」或将文件拖拽到这里"}</Empty>
+          )}
+        </Card>
+      </div>
+
+      {previewIdx !== null && (
+        <AttachmentPreviewModal
+          assetId={a.id}
+          files={files}
+          index={previewIdx}
+          demo={demo}
+          onIndex={setPreviewIdx}
+          onClose={() => setPreviewIdx(null)}
+        />
+      )}
+    </>
   );
 }
 

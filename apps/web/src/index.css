@@ -9,17 +9,17 @@
     "WenQuanYi Zen Hei", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --color-bg: #fbfaf8;
-  --color-rail: #f3f1ed;
+  --color-bg: #faf9f6;
+  --color-rail: #f2f0eb;
   --color-panel: #ffffff;
   --color-field: #f1efea;
-  --color-ink: #1a1d24;
-  --color-muted: #5d6370;
-  --color-subtle: #959aa5;
-  --color-line: #e9e6e0;
-  --color-sel: #f1efea;
-  --color-accent: #1a1d24;
-  --color-accent-soft: #edebe6;
+  --color-ink: #181b22;
+  --color-muted: #5a606e;
+  --color-subtle: #8f95a2;
+  --color-line: #e7e4dd;
+  --color-sel: #efede8;
+  --color-accent: #181b22;
+  --color-accent-soft: #ebe9e3;
   --color-on-accent: #ffffff;
   --color-spark: #ff7a45;
   --color-spark-soft: #fff0e8;
@@ -27,7 +27,7 @@
   --color-crit-soft: #fde8e9;
   --color-warn: #b8650a;
   --color-warn-soft: #fff3e2;
-  --color-ok: #1d8a5a;
+  --color-ok: #1a8757;
   --color-ok-soft: #e2f5ec;
 
   --color-t-server: #3d5bd9;
@@ -44,8 +44,8 @@
   --color-t-phone-soft: #f2f1dc;
   --color-t-account: #b5600f;
   --color-t-account-soft: #fcefdf;
-  --color-t-payment: #3e6670;
-  --color-t-payment-soft: #e3edef;
+  --color-t-payment: #2f6672;
+  --color-t-payment-soft: #e1eef1;
   --color-t-document: #5f5a52;
   --color-t-document-soft: #eeece8;
 
@@ -62,21 +62,28 @@
 
   --radius-sm: 8px;
   --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+:root {
+  --shadow-card: 0 1px 2px rgb(24 27 34 / 0.03), 0 0 0 1px var(--color-line);
+  --shadow-card-hover: 0 6px 20px -6px rgb(24 27 34 / 0.08), 0 0 0 1px color-mix(in srgb, var(--color-ink) 16%, var(--color-line));
+  --shadow-float: 0 16px 40px -12px rgb(24 27 34 / 0.16), 0 2px 6px rgb(24 27 34 / 0.06);
 }
 
 [data-theme="dark"] {
-  --color-bg: #0f1014;
-  --color-rail: #0b0c0f;
-  --color-panel: #16181e;
-  --color-field: #1e2128;
-  --color-ink: #eceef3;
-  --color-muted: #a3a8b4;
-  --color-subtle: #6c7280;
-  --color-line: #25282f;
-  --color-sel: #1e2128;
-  --color-accent: #eceef3;
-  --color-accent-soft: #23262d;
-  --color-on-accent: #0f1014;
+  --color-bg: #0e1014;
+  --color-rail: #0a0b0e;
+  --color-panel: #15181f;
+  --color-field: #1d2029;
+  --color-ink: #eef0f5;
+  --color-muted: #a1a7b5;
+  --color-subtle: #6b7282;
+  --color-line: #242831;
+  --color-sel: #1e222b;
+  --color-accent: #eef0f5;
+  --color-accent-soft: #232731;
+  --color-on-accent: #0e1014;
   --color-spark: #ff8a5c;
   --color-spark-soft: #3a2418;
   --color-crit: #ff6b73;
@@ -99,8 +106,8 @@
   --color-t-phone-soft: #2b2a17;
   --color-t-account: #ffb366;
   --color-t-account-soft: #33251a;
-  --color-t-payment: #8fb9c2;
-  --color-t-payment-soft: #182629;
+  --color-t-payment: #84bcc8;
+  --color-t-payment-soft: #16262a;
   --color-t-document: #bdb6aa;
   --color-t-document-soft: #24221f;
   --color-p-cpu: #6fa0ff;
@@ -112,6 +119,10 @@
   --color-p-load: #9aa8c6;
   --color-p-mid: #c2d94a;
   --color-p-track: #23262e;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.25), inset 0 1px 0 rgb(255 255 255 / 0.03), 0 0 0 1px var(--color-line);
+  --shadow-card-hover: 0 10px 26px -8px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 0 1px color-mix(in srgb, var(--color-ink) 18%, var(--color-line));
+  --shadow-float: 0 22px 50px -12px rgb(0 0 0 / 0.65), 0 0 0 1px color-mix(in srgb, var(--color-ink) 12%, var(--color-line));
 }
 
 html, body, #root { height: 100%; }
@@ -122,21 +133,59 @@ body {
   font-family: var(--font-sans);
   font-size: 13.5px;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv11", "ss01";
 }
+::selection {
+  background: color-mix(in srgb, var(--color-spark) 22%, transparent);
+}
 .tnum { font-variant-numeric: tabular-nums; }
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: transparent; border-radius: 8px; }
-:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-ink) 14%, transparent); }
+
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
+:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-ink) 16%, transparent); }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--color-ink) 28%, transparent); }
+
+@keyframes fc-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fc-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fc-toast {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.fc-animate-fade { animation: fc-fade 140ms ease-out both; }
+.fc-animate-pop { animation: fc-pop 170ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.fc-animate-toast { animation: fc-toast 180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 /*
- * One page-width rule for every page (v0.1.6): content grows with the window, 40px side margins
+ * One page-width rule for every page: content grows with the window, 40px side margins
  * (32px below 1280, 16px on phones) and a 1600px cap on very wide screens.
  * Settings are forms: same margins, but capped at 960px of content and aligned to the settings menu.
  */
 @layer components {
   .page { box-sizing: border-box; width: 100%; max-width: 1600px; margin-inline: auto; padding: 28px 40px; }
   .page-form { max-width: 1040px; margin-inline: 0; }
+  .surface-card {
+    background: var(--color-panel);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+  }
+  .surface-card-interactive {
+    background: var(--color-panel);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 160ms ease, transform 160ms ease, background-color 140ms ease;
+  }
+  .surface-card-interactive:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
   @media (max-width: 1279.98px) { .page { padding-inline: 32px; } }
   @media (max-width: 767.98px) { .page { padding: 16px; } }
 }

@@ -287,6 +287,19 @@ export function createApp({ store, komari, backup, rates, atoll, cloudflare, cli
   });
 
   // attachments (documents)
+  const EXT_MIME: Record<string, string> = {
+    pdf: "application/pdf",
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", ico: "image/x-icon",
+    txt: "text/plain; charset=utf-8", md: "text/plain; charset=utf-8", markdown: "text/plain; charset=utf-8", log: "text/plain; charset=utf-8",
+    csv: "text/csv; charset=utf-8", json: "application/json; charset=utf-8", xml: "text/plain; charset=utf-8",
+    yaml: "text/plain; charset=utf-8", yml: "text/plain; charset=utf-8", ini: "text/plain; charset=utf-8", conf: "text/plain; charset=utf-8",
+    pem: "text/plain; charset=utf-8", crt: "text/plain; charset=utf-8", cer: "text/plain; charset=utf-8", key: "text/plain; charset=utf-8", pub: "text/plain; charset=utf-8",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
+    mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", m4a: "audio/mp4",
+  };
+  const UNSAFE_INLINE_MIME = /^(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/javascript|application\/javascript)/i;
+  const UNSAFE_INLINE_EXT = new Set(["html", "htm", "xhtml", "svg", "svgz", "js", "mjs", "cjs"]);
+
   app.get("/api/assets/:id/attachments/:name", (c) => {
     need(c, "read");
     const a = store.mustGet(c.req.param("id"), true);
@@ -294,7 +307,21 @@ export function createApp({ store, komari, backup, rates, atoll, cloudflare, cli
     const meta = a.attachments?.find((x) => x.name === name);
     const p = backup.attachmentPath(a.id, name);
     if (!meta || !existsSync(p)) throw new HttpError(404, "附件不存在");
-    return new Response(readFileSync(p), { headers: { "content-type": meta.mime || "application/octet-stream", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}` } });
+    const inline = c.req.query("inline") === "1";
+    const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+    let mime = (meta.mime && meta.mime !== "application/octet-stream" ? meta.mime : EXT_MIME[ext]) || "application/octet-stream";
+    if (inline && (UNSAFE_INLINE_EXT.has(ext) || UNSAFE_INLINE_MIME.test(mime))) {
+      // Never execute uploaded HTML/SVG/JS on the app origin when previewed inline.
+      mime = "text/plain; charset=utf-8";
+    }
+    const disposition = inline ? "inline" : "attachment";
+    return new Response(readFileSync(p), {
+      headers: {
+        "content-type": mime,
+        "content-disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(name)}`,
+        "x-content-type-options": "nosniff",
+      },
+    });
   });
   app.post("/api/assets/:id/attachments", async (c) => {
     const actorV = need(c, "write");
