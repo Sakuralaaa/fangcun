@@ -179,19 +179,20 @@ export function Overview({
           </section>
 
           {/* Right Sidebar: Card Reserves + Starred + Cost Breakdown + Probe */}
-          <aside className="flex min-w-0 flex-col gap-3.5">
+          <aside className="flex min-w-0 flex-col gap-3.5 @4xl:sticky @4xl:top-6">
             <OverviewCardReserves onSelect={onSelect} onNav={onNav} />
 
             <Fold id="starred" open={open.starred} onToggle={toggle} title="关注" summary={starred.length ? `${starred.length} 项` : "暂无"}>
               {starred.length ? (
                 <>
-                  <div className="divide-y divide-line border-t border-line">
+                  <div className="max-h-[220px] divide-y divide-line overflow-y-auto border-t border-line [scrollbar-width:thin]">
                     {starred.map((a) => (
                       <StarredRow key={a.id} a={a} online={a.komari ? status[a.komari.uuid]?.online : undefined} onClick={() => onSelect(a.id)} />
                     ))}
                   </div>
-                  <button onClick={() => onNav("/assets?type=starred")} className="flex cursor-pointer items-center gap-1 border-t border-line px-4 py-2.5 text-xs font-medium text-muted hover:bg-field/50 hover:text-ink">
-                    全部关注<ArrowUpRight size={12} />
+                  <button onClick={() => onNav("/assets?type=starred")} className="flex cursor-pointer items-center justify-between border-t border-line bg-bg/40 px-4 py-2 text-xs font-medium text-muted transition-colors hover:bg-field/60 hover:text-ink">
+                    <span>全部关注{starred.length > 5 ? `（共 ${starred.length} 项）` : ""}</span>
+                    <ArrowUpRight size={13} />
                   </button>
                 </>
               ) : (
@@ -245,7 +246,7 @@ export function Overview({
               summary={servers.length ? `${online}/${servers.length} 在线` : komari?.url ? "未绑定" : "未连接"}>
               {servers.length ? (
                 <div className="border-t border-line">
-                  <div className="divide-y divide-line">
+                  <div className="max-h-[220px] divide-y divide-line overflow-y-auto [scrollbar-width:thin]">
                     {servers.map((s) => {
                       const st = status[s.komari!.uuid];
                       const on = Boolean(st?.online);

@@ -202,7 +202,7 @@ export function CardReservesView({ onSelect, onAddCard }: { onSelect: (id: strin
           }
           flush
         >
-          <div className="border-t border-line">
+          <div className="max-h-[340px] overflow-y-auto border-t border-line [scrollbar-width:thin]">
             {report.unassignedCharges.map((ch) => (
               <div
                 key={ch.key}
@@ -449,7 +449,7 @@ function ReserveCardTile({
       {/* Deduction Schedule Timeline */}
       <div className="mt-auto border-t border-line bg-bg/30">
         {timeline.length > 0 ? (
-          <div className="divide-y divide-line">
+          <div className="max-h-[240px] divide-y divide-line overflow-y-auto [scrollbar-width:thin]">
             {timeline.map((item) => (
               <div key={item.key} className="flex h-10 items-center gap-2.5 px-4 text-[12.5px] hover:bg-field/50">
                 <span
@@ -625,7 +625,7 @@ export function CardReserveDetailCard({ card, onSelect }: { card: Asset; onSelec
         )}
 
         {/* Timeline */}
-        <div className="border-t border-line">
+        <div className="max-h-[320px] overflow-y-auto border-t border-line [scrollbar-width:thin]">
           {timeline.length > 0 ? (
             timeline.map((item) => (
               <div key={item.key} className="flex h-11 items-center gap-3 border-b border-line px-4 text-[13px] last:border-0 hover:bg-field/45">
@@ -701,7 +701,7 @@ export function OverviewCardReserves({
           </button>
         </header>
 
-        <div className="divide-y divide-line">
+        <div className="max-h-[220px] divide-y divide-line overflow-y-auto [scrollbar-width:thin]">
           {report.cards.map((c) => {
             const p = c.card.payment!;
             const needLabel = c.recommendedKeep > 0 ? money(c.recommendedKeep, c.balanceCurrency, { free: false }) : fmtCurMap(c.selectedByCurrency, "无待扣");
@@ -742,20 +742,20 @@ export function OverviewCardReserves({
               </div>
             );
           })}
-          {report.unassignedCharges.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onNav("/costs/cards")}
-              className="flex w-full cursor-pointer items-center gap-2 bg-warn-soft/50 px-4 py-2.5 text-left text-xs text-warn transition-colors hover:bg-warn-soft"
-            >
-              <Link2 size={13} className="shrink-0" />
-              <span className="min-w-0 flex-1 truncate">
-                另有 <b>{report.unassignedCharges.length}</b> 项（{fmtCurMap(report.unassignedByCurrency)}）未绑定付款卡
-              </span>
-              <span className="shrink-0 font-medium">去绑定</span>
-            </button>
-          )}
         </div>
+        {report.unassignedCharges.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onNav("/costs/cards")}
+            className="flex w-full cursor-pointer items-center gap-2 border-t border-line bg-warn-soft/50 px-4 py-2.5 text-left text-xs text-warn transition-colors hover:bg-warn-soft"
+          >
+            <Link2 size={13} className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              另有 <b>{report.unassignedCharges.length}</b> 项（{fmtCurMap(report.unassignedByCurrency)}）未绑定付款卡
+            </span>
+            <span className="shrink-0 font-medium">去绑定</span>
+          </button>
+        )}
       </section>
       {editing && <BalanceModal card={editing.card} summary={editing} onClose={() => setEditing(null)} />}
     </>
