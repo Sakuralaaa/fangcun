@@ -670,9 +670,11 @@ export function CardReserveDetailCard({ card, onSelect }: { card: Asset; onSelec
 export function OverviewCardReserves({
   onSelect,
   onNav,
+  className,
 }: {
   onSelect: (id: string) => void;
   onNav: (path: string) => void;
+  className?: string;
 }) {
   const { assets, settings } = useData();
   const [editing, setEditing] = useState<CardReserveSummary | null>(null);
@@ -681,84 +683,96 @@ export function OverviewCardReserves({
     [assets, settings.display],
   );
 
-  if (!report.cards.length && !report.unassignedCharges.length) return null;
-
   return (
-    <>
-      <section className="surface-card overflow-hidden">
-        <header className="flex min-h-11 items-center justify-between gap-2 border-b border-line px-4 py-2">
-          <div className="flex items-center gap-2">
-            <CreditCard size={15} className="text-t-payment" />
-            <h3 className="text-[13.5px] font-semibold">卡片预留提醒</h3>
-            <span className="text-xs text-subtle">未来 30 天</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNav("/costs/cards")}
-            className="flex cursor-pointer items-center gap-1 text-xs font-medium text-muted hover:text-ink"
-          >
-            详情<ArrowUpRight size={13} />
-          </button>
-        </header>
+    <section className={clsx("surface-card flex min-h-0 min-w-0 flex-col overflow-hidden", className)}>
+      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-line px-4">
+        <div className="flex items-center gap-2">
+          <CreditCard size={15} className="text-t-payment" />
+          <h3 className="text-[14px] font-semibold">卡片预留提醒</h3>
+          <span className="text-xs text-subtle">未来 30 天</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onNav("/costs/cards")}
+          className="flex cursor-pointer items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-ink"
+        >
+          详情<ArrowUpRight size={13} />
+        </button>
+      </header>
 
-        <div className="max-h-[220px] divide-y divide-line overflow-y-auto [scrollbar-width:thin]">
-          {report.cards.map((c) => {
-            const p = c.card.payment!;
-            const needLabel = c.recommendedKeep > 0 ? money(c.recommendedKeep, c.balanceCurrency, { free: false }) : fmtCurMap(c.selectedByCurrency, "无待扣");
-            return (
-              <div key={c.card.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-field/45">
-                <button type="button" onClick={() => onSelect(c.card.id)} className="min-w-0 flex-1 cursor-pointer text-left">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-[13px] font-semibold">{c.card.name}</span>
-                    <span className="shrink-0 font-mono text-[11px] text-subtle">···· {p.last4}</span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px] text-muted tnum">
-                    <span>需留 {needLabel}</span>
-                    {c.balance !== null && <span>· 余 {money(c.balance, c.balanceCurrency, { free: false })}</span>}
-                    {c.nextCharge && (
-                      <span className="truncate text-subtle">· 下笔 {md(c.nextCharge.date)} {c.nextCharge.assetName}</span>
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
+        {report.cards.length ? (
+          <div className="divide-y divide-line">
+            {report.cards.map((c) => {
+              const p = c.card.payment!;
+              const needLabel = c.recommendedKeep > 0 ? money(c.recommendedKeep, c.balanceCurrency, { free: false }) : fmtCurMap(c.selectedByCurrency, "无待扣");
+              return (
+                <div key={c.card.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-field/45">
+                  <button type="button" onClick={() => onSelect(c.card.id)} className="min-w-0 flex-1 cursor-pointer text-left">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[13px] font-semibold">{c.card.name}</span>
+                      <span className="shrink-0 font-mono text-[11px] text-subtle">···· {p.last4}</span>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px] text-muted tnum">
+                      <span>需留 {needLabel}</span>
+                      {c.balance !== null && <span>· 余 {money(c.balance, c.balanceCurrency, { free: false })}</span>}
+                      {c.nextCharge && (
+                        <span className="truncate text-subtle">· 下笔 {md(c.nextCharge.date)} {c.nextCharge.assetName}</span>
+                      )}
+                    </div>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {c.status === "card-risk" ? (
+                      <Pill tone="crit" dot>{c.isFrozenWithCharges ? "已冻结" : "将过期"}</Pill>
+                    ) : c.status === "shortfall" ? (
+                      <button type="button" onClick={() => setEditing(c)} className="cursor-pointer" title="点击更新余额">
+                        <Pill tone="crit" dot>补 {money(c.shortfall!, c.balanceCurrency, { free: false })}</Pill>
+                      </button>
+                    ) : c.status === "prepare" ? (
+                      <button type="button" onClick={() => setEditing(c)} className="cursor-pointer" title="点击记录卡内余额">
+                        <Pill tone="warn">留 {needLabel}</Pill>
+                      </button>
+                    ) : c.status === "ok" ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-ok">
+                        <CheckCircle2 size={13} />充足
+                      </span>
+                    ) : (
+                      <span className="text-xs text-subtle">无待扣</span>
                     )}
                   </div>
-                </button>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {c.status === "card-risk" ? (
-                    <Pill tone="crit" dot>{c.isFrozenWithCharges ? "已冻结" : "将过期"}</Pill>
-                  ) : c.status === "shortfall" ? (
-                    <button type="button" onClick={() => setEditing(c)} className="cursor-pointer" title="点击更新余额">
-                      <Pill tone="crit" dot>补 {money(c.shortfall!, c.balanceCurrency, { free: false })}</Pill>
-                    </button>
-                  ) : c.status === "prepare" ? (
-                    <button type="button" onClick={() => setEditing(c)} className="cursor-pointer" title="点击记录卡内余额">
-                      <Pill tone="warn">留 {needLabel}</Pill>
-                    </button>
-                  ) : c.status === "ok" ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-ok">
-                      <CheckCircle2 size={13} />充足
-                    </span>
-                  ) : (
-                    <span className="text-xs text-subtle">无待扣</span>
-                  )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
-        {report.unassignedCharges.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onNav("/costs/cards")}
-            className="flex w-full cursor-pointer items-center gap-2 border-t border-line bg-warn-soft/50 px-4 py-2.5 text-left text-xs text-warn transition-colors hover:bg-warn-soft"
-          >
-            <Link2 size={13} className="shrink-0" />
-            <span className="min-w-0 flex-1 truncate">
-              另有 <b>{report.unassignedCharges.length}</b> 项（{fmtCurMap(report.unassignedByCurrency)}）未绑定付款卡
-            </span>
-            <span className="shrink-0 font-medium">去绑定</span>
-          </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex h-full min-h-[160px] flex-col items-center justify-center px-4 text-center">
+            <p className="text-[13px] font-medium text-muted">还没有添加支付卡</p>
+            <button
+              type="button"
+              onClick={() => onNav("/costs/cards")}
+              className="mt-1.5 cursor-pointer text-xs text-t-payment underline underline-offset-3 hover:brightness-90"
+            >
+              前往卡片预留中心添加
+            </button>
+          </div>
         )}
-      </section>
+      </div>
+
+      {report.unassignedCharges.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onNav("/costs/cards")}
+          className="flex h-10 shrink-0 w-full cursor-pointer items-center gap-2 border-t border-line bg-warn-soft/55 px-4 text-left text-xs text-warn transition-colors hover:bg-warn-soft"
+        >
+          <Link2 size={13} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            另有 <b>{report.unassignedCharges.length}</b> 项（{fmtCurMap(report.unassignedByCurrency)}）未绑定付款卡
+          </span>
+          <span className="shrink-0 font-medium">去绑定</span>
+        </button>
+      )}
       {editing && <BalanceModal card={editing.card} summary={editing} onClose={() => setEditing(null)} />}
-    </>
+    </section>
   );
 }
 

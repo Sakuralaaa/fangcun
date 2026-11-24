@@ -1,7 +1,7 @@
 import type { CpaPref } from "./cliproxyapi";
 /** Data schema version. Bump together with a migration in backup.ts. */
 export const SCHEMA_VERSION = 3;
-export const APP_VERSION = "0.1.13";
+export const APP_VERSION = "0.1.14";
 
 export const ASSET_TYPES = [
   "server", "domain", "cert", "subscription", "mail", "phone", "payment", "account", "document",

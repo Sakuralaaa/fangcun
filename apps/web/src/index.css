@@ -141,6 +141,7 @@ body {
 }
 .tnum { font-variant-numeric: tabular-nums; }
 
+* { scrollbar-color: color-mix(in srgb, var(--color-ink) 16%, transparent) transparent; }
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }

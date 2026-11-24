@@ -1,7 +1,7 @@
 import { compareStarred, computeCardReserves, displayTotal, findLinkedCards, isBilled, monthlyByCurrency, money, trafficUsed, TYPE_LABEL } from "@fangcun/core";
 import clsx from "clsx";
-import { AlertTriangle, ArrowUpRight, ChevronDown, CreditCard, Pin, Plus, Search, Star } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertTriangle, ArrowUpRight, Pin, Plus, Search, Server, Star } from "lucide-react";
+import { useMemo } from "react";
 import type { Asset, AssetType } from "../data/types";
 import { dueLabel, getToday, monthlyDisplay, perCycle, remindDays, renewOpen, renewOpensAt, urgency, ymd } from "../lib/fmt";
 import { useData, useLiveStatus } from "../lib/store";
@@ -36,8 +36,6 @@ export function Overview({
   const manual = soon.filter((a) => !a.autoRenew);
   const byType = Object.entries(billed.reduce<Record<string, number>>((m, a) => ((m[a.type] = (m[a.type] ?? 0) + monthlyDisplay(a, disp)), m), {}))
     .filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  const major = byType.filter(([, v]) => monthly && v / monthly >= 0.02);
-  const minor = byType.filter(([, v]) => monthly && v / monthly < 0.02).reduce((s, [, v]) => s + v, 0);
   const servers = assets.filter((a) => a.komari);
   const online = servers.filter((a) => status[a.komari!.uuid]?.online).length;
   const d = new Date(`${today}T12:00:00`);
@@ -52,14 +50,13 @@ export function Overview({
   );
   const cardAlerts = cardReport.cardsNeedingTopUp + cardReport.cardsAtRisk;
 
-  const [open, toggle] = useFold();
   const week = upcoming.filter((a) => remindDays(a) <= 7);
   const later = upcoming.filter((a) => remindDays(a) > 7);
   const row = (a: Asset) => <DueRow key={a.id} a={a} cards={findLinkedCards(a, assets)} onClick={() => onSelect(a.id)} />;
 
   return (
     <main className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-      <div className="page flex flex-col gap-6">
+      <div className="page flex flex-col gap-5">
         {/* Hero Header */}
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div>
@@ -93,8 +90,8 @@ export function Overview({
           </button>
         )}
 
-        {/* 4-Card KPI Row */}
-        <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
+        {/* Row 1: 4 Equal-Height KPI Cards */}
+        <div className="grid grid-cols-2 gap-3.5 @4xl:grid-cols-4">
           <StatCard
             label="30 天内到期"
             value={soon.length}
@@ -137,11 +134,62 @@ export function Overview({
           />
         </div>
 
-        {/* Main 2-Column Content */}
-        <div className="grid items-start gap-x-7 gap-y-6 @4xl:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
-          {/* Left: Upcoming Renewals Card */}
-          <section className="surface-card min-w-0 overflow-hidden">
-            <header className="flex min-h-11 items-center justify-between border-b border-line px-4 py-2">
+        {/* Row 2: Full-width Horizontal Expense Breakdown Bar (matching 费用 page style) */}
+        {monthly > 0 && byType.length > 0 && (
+          <section className="surface-card px-4 py-3.5">
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[13.5px] font-semibold">每月支出占比</h2>
+                <span className="text-xs text-subtle tnum">
+                  约 {money(Math.round(monthly), cur, { free: false })}/月
+                  {unconverted ? ` · 另有 ${unconverted}` : ""}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNav("/costs")}
+                className="flex cursor-pointer items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-ink"
+              >
+                费用明细<ArrowUpRight size={13} />
+              </button>
+            </div>
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-field">
+              {byType.map(([t, v]) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onNav(`/assets?type=${t}`)}
+                  title={`${TYPE_LABEL[t as AssetType]}：${money(Math.round(v * 10) / 10, cur, { free: false })}/月`}
+                  style={{ width: `${Math.max(1.5, (v / monthly) * 100)}%` }}
+                  className={clsx("h-full cursor-pointer transition-opacity hover:opacity-85", typeMeta[t as AssetType].bar)}
+                />
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {byType.map(([t, v]) => {
+                const pct = Math.max(1, Math.round((v / monthly) * 100));
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => onNav(`/assets?type=${t}`)}
+                    className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-line bg-bg/70 px-2.5 text-xs text-muted transition-colors hover:bg-field hover:text-ink tnum"
+                  >
+                    <span className={clsx("size-2 rounded-full", typeMeta[t as AssetType].bar)} />
+                    <span>{TYPE_LABEL[t as AssetType]}</span>
+                    <span className="text-subtle">{pct}%</span>
+                    <span className="font-semibold text-ink">{money(Math.round(v * 10) / 10, cur, { free: false })}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Row 3: Perfectly Equal-Height Paired Row (即将到期 | 卡片预留提醒) */}
+        <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+          <section className="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden @4xl:h-[420px]">
+            <header className="flex h-11 shrink-0 items-center justify-between border-b border-line px-4">
               <div className="flex items-center gap-2">
                 <h2 className="text-[14px] font-semibold">即将到期</h2>
                 {upcoming.length > 0 && (
@@ -151,167 +199,142 @@ export function Overview({
               <span className="text-xs text-subtle">未来 45 天</span>
             </header>
 
-            {upcoming.length ? (
-              <div>
-                {week.length > 0 && (
-                  <>
-                    <div className="flex items-center gap-2 bg-crit-soft/45 px-4 py-1.5 text-[11.5px] font-semibold text-crit">
-                      <span className="size-1.5 rounded-full bg-crit" />
-                      这周要续 <span className="font-normal opacity-80 tnum">{week.length}</span>
-                    </div>
-                    <div className="divide-y divide-line">{week.map(row)}</div>
-                  </>
-                )}
-                {later.length > 0 && (
-                  <>
-                    {week.length > 0 && (
-                      <div className="flex items-center gap-2 border-t border-line bg-bg/60 px-4 py-1.5 text-[11.5px] font-medium text-muted">
-                        之后 <span className="text-subtle tnum">{later.length}</span>
+            <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
+              {upcoming.length ? (
+                <div>
+                  {week.length > 0 && (
+                    <>
+                      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-line/60 bg-crit-soft/85 px-4 py-1.5 text-[11.5px] font-semibold text-crit backdrop-blur-xs">
+                        <span className="size-1.5 rounded-full bg-crit" />
+                        这周要续 <span className="font-normal opacity-80 tnum">{week.length}</span>
                       </div>
-                    )}
-                    <div className="divide-y divide-line">{later.map(row)}</div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <p className="px-4 py-10 text-center text-[13px] text-muted">未来 45 天没有要到期的资产</p>
-            )}
-          </section>
-
-          {/* Right Sidebar: Card Reserves + Starred + Cost Breakdown + Probe */}
-          <aside className="flex min-w-0 flex-col gap-3.5 @4xl:sticky @4xl:top-6">
-            <OverviewCardReserves onSelect={onSelect} onNav={onNav} />
-
-            <Fold id="starred" open={open.starred} onToggle={toggle} title="关注" summary={starred.length ? `${starred.length} 项` : "暂无"}>
-              {starred.length ? (
-                <>
-                  <div className="max-h-[220px] divide-y divide-line overflow-y-auto border-t border-line [scrollbar-width:thin]">
-                    {starred.map((a) => (
-                      <StarredRow key={a.id} a={a} online={a.komari ? status[a.komari.uuid]?.online : undefined} onClick={() => onSelect(a.id)} />
-                    ))}
-                  </div>
-                  <button onClick={() => onNav("/assets?type=starred")} className="flex cursor-pointer items-center justify-between border-t border-line bg-bg/40 px-4 py-2 text-xs font-medium text-muted transition-colors hover:bg-field/60 hover:text-ink">
-                    <span>全部关注{starred.length > 5 ? `（共 ${starred.length} 项）` : ""}</span>
-                    <ArrowUpRight size={13} />
-                  </button>
-                </>
-              ) : (
-                <p className="flex items-center gap-2 border-t border-line px-4 py-3.5 text-[13px] text-muted">
-                  <Star size={14} strokeWidth={1.9} className="shrink-0" />还没有关注的资产
-                </p>
-              )}
-            </Fold>
-
-            <Fold id="costs" open={open.costs} onToggle={toggle} title="每月支出构成" summary={`${money(Math.round(monthly), cur, { free: false })}/月`}>
-              <div className="border-t border-line px-4 py-3.5">
-                {monthly > 0 ? (
-                  <>
-                    <div className="mb-3.5 flex h-2 overflow-hidden rounded-full bg-field">
-                      {byType.map(([t, v]) => (
-                        <span key={t} style={{ width: `${(v / monthly) * 100}%` }} className={clsx("h-full", typeMeta[t as AssetType].bar)} />
-                      ))}
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {major.slice(0, 5).map(([t, v]) => (
-                        <div key={t} className="flex items-center gap-2.5 text-[13px]">
-                          <span className={clsx("size-2.5 shrink-0 rounded-[3px]", typeMeta[t as AssetType].bar)} />
-                          <span className="min-w-0 flex-1 truncate whitespace-nowrap text-muted">{TYPE_LABEL[t as AssetType]}</span>
-                          <span className="text-xs text-subtle tnum">{Math.round((v / monthly) * 100)}%</span>
-                          <span className="w-16 shrink-0 text-right font-semibold whitespace-nowrap tnum">
-                            {money(Math.round(v * 10) / 10, cur, { free: false })}
-                          </span>
-                        </div>
-                      ))}
-                      {(minor > 0 || major.length > 5) && (
-                        <div className="flex items-center gap-2.5 text-[13px]">
-                          <span className="size-2.5 shrink-0 rounded-[3px] bg-subtle/40" />
-                          <span className="min-w-0 flex-1 truncate whitespace-nowrap text-muted">其他 {byType.length - Math.min(5, major.length)} 类</span>
-                          <span className="text-xs text-subtle tnum">
-                            {Math.max(1, Math.round(((minor + major.slice(5).reduce((s, [, v]) => s + v, 0)) / monthly) * 100))}%
-                          </span>
-                          <span className="w-16 shrink-0 text-right font-semibold whitespace-nowrap tnum">
-                            {money(Math.round((minor + major.slice(5).reduce((s, [, v]) => s + v, 0)) * 10) / 10, cur, { free: false })}
-                          </span>
+                      <div className="divide-y divide-line">{week.map(row)}</div>
+                    </>
+                  )}
+                  {later.length > 0 && (
+                    <>
+                      {week.length > 0 && (
+                        <div className="sticky top-0 z-10 flex items-center gap-2 border-y border-line bg-bg/92 px-4 py-1.5 text-[11.5px] font-medium text-muted backdrop-blur-xs">
+                          之后 <span className="text-subtle tnum">{later.length}</span>
                         </div>
                       )}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-[13px] text-muted">还没有带价格的资产</p>
-                )}
-              </div>
-            </Fold>
-
-            <Fold id="probe" open={open.probe} onToggle={toggle} title={<span className="flex items-center gap-2">探针 <KomariBadge /></span>}
-              summary={servers.length ? `${online}/${servers.length} 在线` : komari?.url ? "未绑定" : "未连接"}>
-              {servers.length ? (
-                <div className="border-t border-line">
-                  <div className="max-h-[220px] divide-y divide-line overflow-y-auto [scrollbar-width:thin]">
-                    {servers.map((s) => {
-                      const st = status[s.komari!.uuid];
-                      const on = Boolean(st?.online);
-                      const pct = st && st.trafficLimit ? pctOf(trafficUsed(st), st.trafficLimit) : null;
-                      return (
-                        <button key={s.id} onClick={() => onSelect(s.id)} className="flex h-11 w-full shrink-0 cursor-pointer items-center gap-3 px-4 text-left text-[13px] transition-colors hover:bg-field/60">
-                          <span className={clsx("size-2 shrink-0 rounded-full", on ? "bg-ok" : "bg-subtle")} title={on ? "在线" : "离线"} />
-                          <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">{s.name}</span>
-                          {on && pct !== null && (
-                            <span className="flex w-20 shrink-0 items-center gap-2 @max-sm:hidden" title={`流量 ${pct}%`}>
-                              <span className="h-1 flex-1 overflow-hidden rounded-full bg-field">
-                                <span className={clsx("block h-full rounded-full", pct >= 90 ? "bg-crit" : pct >= 75 ? "bg-warn" : "bg-accent")} style={{ width: `${pct}%` }} />
-                              </span>
-                              <span className="w-8 text-right text-[11px] text-muted tnum">{pct}%</span>
-                            </span>
-                          )}
-                          {!on && <span className="shrink-0 text-xs text-muted">离线</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {komari?.url && (
-                    <a href={komari.url} target="_blank" rel="noreferrer" className="flex w-full items-center gap-1 border-t border-line px-4 py-2.5 text-xs text-muted hover:bg-field/50 hover:text-ink">
-                      {komari.url.replace(/^https?:\/\//, "")}<ArrowUpRight size={12} />
-                    </a>
+                      <div className="divide-y divide-line">{later.map(row)}</div>
+                    </>
                   )}
                 </div>
               ) : (
-                <button onClick={() => onNav("/settings/komari")} className="border-t border-line px-4 py-3.5 text-left text-[13px] text-muted hover:text-ink">
-                  {komari?.url ? "去绑定节点" : "去连接 Komari"}
-                </button>
+                <div className="grid h-full min-h-[160px] place-items-center px-4 text-[13px] text-muted">
+                  未来 45 天没有要到期的资产
+                </div>
               )}
-            </Fold>
-          </aside>
+            </div>
+          </section>
+
+          <OverviewCardReserves onSelect={onSelect} onNav={onNav} className="@4xl:h-[420px]" />
+        </div>
+
+        {/* Row 4: Perfectly Equal-Height Paired Row (关注 | 探针 Komari) */}
+        <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-2">
+          {/* Starred Card */}
+          <section className="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden @4xl:h-[300px]">
+            <header className="flex h-11 shrink-0 items-center justify-between border-b border-line px-4">
+              <div className="flex items-center gap-2">
+                <Star size={14} strokeWidth={2} className="text-muted" />
+                <h2 className="text-[14px] font-semibold">关注</h2>
+                <span className="text-xs text-subtle tnum">{starred.length} 项</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNav("/assets?type=starred")}
+                className="flex cursor-pointer items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-ink"
+              >
+                全部<ArrowUpRight size={13} />
+              </button>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
+              {starred.length ? (
+                <div className="divide-y divide-line">
+                  {starred.map((a) => (
+                    <StarredRow key={a.id} a={a} online={a.komari ? status[a.komari.uuid]?.online : undefined} onClick={() => onSelect(a.id)} />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid h-full min-h-[140px] place-items-center px-4 text-[13px] text-muted">
+                  还没有关注的资产，可在资产列表点星标添加
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Komari Probe Card */}
+          <section className="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden @4xl:h-[300px]">
+            <header className="flex h-11 shrink-0 items-center justify-between border-b border-line px-4">
+              <div className="flex items-center gap-2">
+                <Server size={14} strokeWidth={2} className="text-t-server" />
+                <h2 className="text-[14px] font-semibold">探针</h2>
+                <KomariBadge />
+                <span className="text-xs text-subtle tnum">
+                  {servers.length ? `${online}/${servers.length} 在线` : komari?.url ? "未绑定" : "未连接"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNav(servers.length ? "/servers" : "/settings/komari")}
+                className="flex cursor-pointer items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-ink"
+              >
+                {servers.length ? "监控面板" : "去配置"}<ArrowUpRight size={13} />
+              </button>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
+              {servers.length ? (
+                <div className="divide-y divide-line">
+                  {servers.map((s) => {
+                    const st = status[s.komari!.uuid];
+                    const on = Boolean(st?.online);
+                    const pct = st && st.trafficLimit ? pctOf(trafficUsed(st), st.trafficLimit) : null;
+                    return (
+                      <button key={s.id} onClick={() => onSelect(s.id)} className="flex h-11 w-full shrink-0 cursor-pointer items-center gap-3 px-4 text-left text-[13px] transition-colors hover:bg-field/60">
+                        <span className={clsx("size-2 shrink-0 rounded-full", on ? "bg-ok" : "bg-subtle")} title={on ? "在线" : "离线"} />
+                        <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">{s.name}</span>
+                        {on && pct !== null && (
+                          <span className="flex w-24 shrink-0 items-center gap-2 @max-sm:hidden" title={`流量 ${pct}%`}>
+                            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-field">
+                              <span className={clsx("block h-full rounded-full", pct >= 90 ? "bg-crit" : pct >= 75 ? "bg-warn" : "bg-accent")} style={{ width: `${pct}%` }} />
+                            </span>
+                            <span className="w-8 text-right text-[11px] text-muted tnum">{pct}%</span>
+                          </span>
+                        )}
+                        {!on && <span className="shrink-0 text-xs text-subtle">离线</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid h-full min-h-[140px] place-items-center px-4 text-[13px] text-muted">
+                  <button type="button" onClick={() => onNav("/settings/komari")} className="cursor-pointer underline decoration-line underline-offset-4 hover:text-ink">
+                    {komari?.url ? "去绑定 Komari 节点" : "去连接 Komari 探针"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {komari?.url && servers.length > 0 && (
+              <a
+                href={komari.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-9 shrink-0 items-center justify-between border-t border-line bg-bg/40 px-4 text-xs text-muted transition-colors hover:bg-field/60 hover:text-ink"
+              >
+                <span className="truncate font-mono">{komari.url.replace(/^https?:\/\//, "")}</span>
+                <ArrowUpRight size={13} className="shrink-0" />
+              </a>
+            )}
+          </section>
         </div>
       </div>
     </main>
-  );
-}
-
-type FoldId = "starred" | "costs" | "probe";
-const FOLD_KEY = "fc-overview-open-v2";
-function useFold(): [Record<FoldId, boolean>, (id: FoldId) => void] {
-  const [open, setOpen] = useState<Record<FoldId, boolean>>(() => {
-    try { return { starred: true, costs: true, probe: false, ...JSON.parse(localStorage.getItem(FOLD_KEY) ?? "{}") }; }
-    catch { return { starred: true, costs: true, probe: false }; }
-  });
-  const toggle = (id: FoldId) => setOpen((o) => {
-    const next = { ...o, [id]: !o[id] };
-    try { localStorage.setItem(FOLD_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
-    return next;
-  });
-  return [open, toggle];
-}
-
-function Fold({ id, open, onToggle, title, summary, children }: { id: FoldId; open: boolean; onToggle: (id: FoldId) => void; title: React.ReactNode; summary: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="surface-card overflow-hidden">
-      <button onClick={() => onToggle(id)} aria-expanded={open} className="flex h-11 w-full cursor-pointer items-center gap-2 px-4 text-left transition-colors hover:bg-field/40">
-        <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{title}</span>
-        <span className="shrink-0 text-[12.5px] text-muted tnum">{summary}</span>
-        <ChevronDown size={15} className={clsx("shrink-0 text-muted transition-transform duration-150", open && "rotate-180")} />
-      </button>
-      {open && <div className="flex flex-col">{children}</div>}
-    </section>
   );
 }
 
@@ -323,7 +346,7 @@ function DueRow({ a, cards, onClick }: { a: Asset; cards: Asset[]; onClick: () =
   const how = a.autoRenew ? "自动续费" : a.type === "payment" ? "需换卡" : renewOpensAt(a) ? "手动续期" : "手动续费";
   const sub = [TYPE_LABEL[a.type], a.provider, a.price > 0 ? perCycle(a) : "免费"].filter(Boolean).join(" · ");
   return (
-    <button onClick={onClick} className="flex min-h-[60px] w-full cursor-pointer items-center gap-3.5 px-4 py-2.5 text-left transition-colors hover:bg-field/60">
+    <button onClick={onClick} className="flex min-h-[58px] w-full cursor-pointer items-center gap-3.5 px-4 py-2.5 text-left transition-colors hover:bg-field/60">
       {/* Mini Calendar Date Badge */}
       <span
         className={clsx(
@@ -347,7 +370,6 @@ function DueRow({ a, cards, onClick }: { a: Asset; cards: Asset[]; onClick: () =
           <span className="truncate tnum">{sub}</span>
           {cards.length > 0 && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-[4px] bg-t-payment-soft/80 px-1.5 py-px text-[10.5px] text-t-payment max-sm:hidden">
-              <CreditCard size={10} />
               <span className="font-mono">{cards[0].payment?.last4}</span>
             </span>
           )}
