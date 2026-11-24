@@ -56,9 +56,9 @@ export function Overview({
 
   return (
     <main className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-      <div className="page flex flex-col gap-5">
+      <div className="page flex flex-col gap-4">
         {/* Hero Header */}
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="mb-1 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div>
             <p className="text-[12.5px] font-medium text-muted">
               {d.getMonth() + 1} 月 {d.getDate()} 日 · 星期{WEEK[d.getDay()]}
@@ -90,8 +90,8 @@ export function Overview({
           </button>
         )}
 
-        {/* Row 1: 4 Equal-Height KPI Cards */}
-        <div className="grid grid-cols-2 gap-3.5 @4xl:grid-cols-4">
+        {/* Row 1: 4 Equal-Height KPI Cards (gap-4 aligns center seam with Rows 3 & 4) */}
+        <div className="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
           <StatCard
             label="30 天内到期"
             value={soon.length}
@@ -186,9 +186,9 @@ export function Overview({
           </section>
         )}
 
-        {/* Row 3: Perfectly Equal-Height Paired Row (即将到期 | 卡片预留提醒) */}
-        <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-          <section className="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden @4xl:h-[420px]">
+        {/* Row 3: Perfectly Symmetrical 50/50 Paired Row (aligned to Row 1 & Row 4 center seam) */}
+        <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-2">
+          <section className="@container surface-card flex min-h-0 min-w-0 flex-col overflow-hidden @4xl:h-[420px]">
             <header className="flex h-11 shrink-0 items-center justify-between border-b border-line px-4">
               <div className="flex items-center gap-2">
                 <h2 className="text-[14px] font-semibold">即将到期</h2>
@@ -378,7 +378,7 @@ function DueRow({ a, cards, onClick }: { a: Asset; cards: Asset[]; onClick: () =
 
       <span
         className={clsx(
-          "shrink-0 rounded-[6px] px-2 py-0.5 text-[11.5px] whitespace-nowrap @max-md:hidden",
+          "shrink-0 rounded-[6px] px-2 py-0.5 text-[11.5px] whitespace-nowrap @max-[480px]:hidden",
           a.autoRenew ? "text-muted" : "border border-line bg-bg font-medium text-ink",
         )}
       >
